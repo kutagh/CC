@@ -55,8 +55,12 @@ namespace CC {
             LocalPort = short.Parse(args[iterator++]);
             var local = new Neighbor(LocalPort, null);
             Globals.RoutingTable.Add(LocalPort, new Row() { NBu = local, Du = 0 });
-            Globals.RoutingTable.Add(45, new Row() { NBu = local, Du = 1 });
-            PrintRoutingTable(LocalPort);
+            
+            // Testing purposes
+            Globals.RoutingTable.Add(45, new Row() { NBu = local, Du = 1 }); 
+            PrintRoutingTable(LocalPort); 
+            
+            
             Thread listener = new Thread(() => ListenAt(LocalPort));
             listener.Start();
         }
@@ -143,7 +147,7 @@ namespace CC {
 
         public void SendMessage(string message) {
             if (NBu == null) // Can't send whatsoever...
-                return;
+                return; // Might want to throw an error...
             // Send to NBu
             NBu.SendMessage(message);
         }
