@@ -53,26 +53,41 @@ namespace CC {
                 Console.Title = "port = {0}".Formatter(args[iterator]); // Port number
             }
             // Main listener
-            LocalPort = short.Parse(args[iterator++]);
+            LocalPort = short.Parse(args[iterator]);
             var local = new Neighbor(LocalPort, null);
             Globals.RoutingTable.Add(LocalPort, new Row() { NBu = local, Du = 0 });
             
-            // Testing purposes
-            Globals.RoutingTable.Add(45, new Row() { NBu = local, Du = 1 }); 
-            PrintRoutingTable(LocalPort); 
-            
-            
+            // Start listener service first
             Thread listener = new Thread(() => ListenAt(LocalPort));
             listener.Start();
+            
+            // Connect to other ports
+            while (++iterator < args.Length) {
+                Port port = Port.Parse(args[iterator]);
+                Console.WriteLine(port);
+                if (port > LocalPort) ConnectTo(port);
+                else Console.WriteLine("Skipped");
+            }
+            Console.WriteLine("Connected to them all");
+            foreach (var kvp in Globals.RoutingTable) {
+                if (kvp.Key != LocalPort) {
+                    Console.WriteLine("Sending message to {0}".Formatter(kvp.Key));
+                    kvp.Value.SendMessage("Hello from {0}".Formatter(LocalPort));
+                }
+            }
+            
         }
 
         static void ListenAt(short port) {
+            Console.WriteLine("Listening at {0}".Formatter(port));
             TcpListener listener = new TcpListener(System.Net.IPAddress.Any, port);
             listener.Start();
             while (true) {
                 // Receive client connections and process them
+                Console.WriteLine("Waiting for connection");
                 var client = listener.AcceptTcpClient();
-                using (StreamReader reader = new StreamReader(client.GetStream())) {
+                Console.WriteLine("Received incoming connection");
+                var reader = new StreamReader(client.GetStream());
                     var message = reader.ReadLine();
                     if (!message.StartsWith(Globals.ConnectionMessage)) {
                         List<string> messages = new List<string>();
@@ -82,14 +97,15 @@ namespace CC {
                         } while (!message.StartsWith(Globals.ConnectionMessage));
                     }
                     ProcessClient(short.Parse(message.Substring(Globals.ConnectionMessage.Length)), client); // Need to acquire proper port number.
-                }
+                
             }
         }
 
         static void ListenTo(TcpClient client) {
-            using (StreamReader writer = new StreamReader(client.GetStream())) {
+            using (StreamReader reader = new StreamReader(client.GetStream())) {
                 while (true) {
                     // Receive messages and parse them
+                    Console.WriteLine(reader.ReadLine());
                 }
             }
         }
@@ -101,17 +117,27 @@ namespace CC {
         static void ConnectTo(short port) {
             // Connect to port
             try {
+                Console.WriteLine("Starting attempt");
                 var client = new TcpClient("localhost", port);
+                Console.WriteLine("Connected");
                 ProcessClient(port, client);
+                Console.WriteLine("Processed");
                 Globals.RoutingTable[port].SendMessage("{0}{1}".Formatter(Globals.ConnectionMessage, LocalPort));
+                Console.WriteLine("Handshaken");
             } // 
-            catch { Thread.Sleep(10); ConnectTo(port); }
+            catch {
+                Console.WriteLine("Sleep");
+                Thread.Sleep(10); ConnectTo(port); 
+            }
         }
 
         private static void ProcessClient(short port, TcpClient client) {
             var nb = new Neighbor(port, client);
             Globals.RoutingTable.Add(port, new Row() { NBu = nb });
-            throw new NotImplementedException();
+
+            Thread listenForMessages = new Thread(() => ListenTo(client));
+            listenForMessages.Start();
+            //throw new NotImplementedException();
         }
 
         static void PrintRoutingTable(short localPort) {
