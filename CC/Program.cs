@@ -13,10 +13,11 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Port = System.Int16;
 
 namespace CC {
     public static class Globals {
-        public static Dictionary<short, Row> RoutingTable = new Dictionary<short, Row>();
+        public static Dictionary<Port, Row> RoutingTable = new Dictionary<Port, Row>();
 
         public static string Formatter(this string s, params object[] parameters) { return string.Format(s, parameters); }
 
@@ -33,7 +34,7 @@ namespace CC {
         [DllImport("user32.dll", EntryPoint = "SetWindowPos")]
         public static extern IntPtr SetWindowPos(IntPtr hWnd, int hWndInsertAfter, int x, int Y, int cx, int cy, int wFlags);
         #endregion
-        static short LocalPort;
+        static Port LocalPort;
         static void Main(string[] args) {
 #if DEBUG
             Console.WriteLine("Debugging mode");
@@ -143,7 +144,7 @@ namespace CC {
         /// <summary>
         /// Dictionary that contains all distances of other nodes to node v, as known by node u
         /// </summary>
-        public Dictionary<Neighbor, short> NDISu = new Dictionary<Neighbor, short>();
+        public Dictionary<Port, int> NDISu = new Dictionary<Port, int>();
 
         public void SendMessage(string message) {
             if (NBu == null) // Can't send whatsoever...
@@ -154,13 +155,13 @@ namespace CC {
     }
 
     public class Neighbor {
-        public short Port { get; protected set; }
+        public Port Port { get; protected set; }
         TcpClient client;
         StreamWriter writer;
 
         public Neighbor(short port, TcpClient client) {
             this.client = client;
-            Port = port;
+            this.Port = port;
             if (client != null) {
                 writer = new StreamWriter(client.GetStream());
                 writer.AutoFlush = true;
