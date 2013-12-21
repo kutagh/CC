@@ -16,12 +16,33 @@ using System.Threading.Tasks;
 using Port = System.Int16;
 
 namespace CC {
-    public static class Globals {
+    public static class Global {
+        public static class Strings {
+            public static string ConnectionMessage = "Connection from";
+            public static string parameterError = "The {0} parameter '{1}' was not correct, please enter {2}.";
+        }
+
+        public static class PackageNames {
+            public static string Connection = "Connection Handshake";
+            public static string Disconnect = "Disconnect message";
+            public static string Broadcast  = "Broadcast";
+        }
         public static Dictionary<Port, Row> RoutingTable = new Dictionary<Port, Row>();
 
         public static string Formatter(this string s, params object[] parameters) { return string.Format(s, parameters); }
 
-        public static string ConnectionMessage = "Connection from";
+
+        static char separator = '|';
+
+        public static string CreatePackage(string packageName, Port destination, string payload) {
+            return "{0}{3}{1}{3}{2}".Formatter(packageName, destination, payload, separator);
+        }
+
+        public static string[] UnpackPackage(string package) {
+            if (package.Count(x => x == separator) == 2)
+                return package.Split(separator);
+            else return new string[] { package };
+        }
     }
     class NetwProg {
         #region Console Window code
@@ -53,10 +74,10 @@ namespace CC {
                 Console.Title = "port = {0}".Formatter(args[iterator]); // Port number
             }
             // Main listener
-            LocalPort = short.Parse(args[iterator]);
+            LocalPort = Port.Parse(args[iterator]);
             var local = new Neighbor(LocalPort, null);
-            Globals.RoutingTable.Add(LocalPort, new Row() { NBu = local, Du = 0 });
-            
+            Global.RoutingTable.Add(LocalPort, new Row() { NBu = local, Du = 0 });
+
             // Start listener service first
             Thread listener = new Thread(() => ListenAt(LocalPort));
             listener.Start();
@@ -69,7 +90,7 @@ namespace CC {
                 else Console.WriteLine("Skipped");
             }
             Console.WriteLine("Connected to them all");
-            foreach (var kvp in Globals.RoutingTable) {
+            foreach (var kvp in Global.RoutingTable) {
                 if (kvp.Key != LocalPort) {
                     Console.WriteLine("Sending message to {0}".Formatter(kvp.Key));
                     kvp.Value.SendMessage("Hello from {0}".Formatter(LocalPort));
@@ -78,7 +99,7 @@ namespace CC {
             
         }
 
-        static void ListenAt(short port) {
+        static void ListenAt(Port port) {
             Console.WriteLine("Listening at {0}".Formatter(port));
             TcpListener listener = new TcpListener(System.Net.IPAddress.Any, port);
             listener.Start();
@@ -88,24 +109,36 @@ namespace CC {
                 var client = listener.AcceptTcpClient();
                 Console.WriteLine("Received incoming connection");
                 var reader = new StreamReader(client.GetStream());
-                    var message = reader.ReadLine();
-                    if (!message.StartsWith(Globals.ConnectionMessage)) {
-                        List<string> messages = new List<string>();
-                        do {
-                            messages.Add(message);
-                            message = reader.ReadLine();
-                        } while (!message.StartsWith(Globals.ConnectionMessage));
-                    }
-                    ProcessClient(short.Parse(message.Substring(Globals.ConnectionMessage.Length)), client); // Need to acquire proper port number.
-                
+                var package = Global.UnpackPackage(reader.ReadLine());
+                while (package[0] != Global.PackageNames.Connection) { // Error handling
+                    Console.WriteLine("Error: Unexpected package received, dropping package.");
+                    package = Global.UnpackPackage(reader.ReadLine());
+                }
+                ProcessClient(Port.Parse(package[2].Substring(Global.Strings.ConnectionMessage.Length)), client); // Need to acquire proper port number.
+
             }
         }
 
         static void ListenTo(TcpClient client) {
             using (StreamReader reader = new StreamReader(client.GetStream())) {
                 while (true) {
-                    // Receive messages and parse them
-                    Console.WriteLine(reader.ReadLine());
+                    var message = reader.ReadLine();
+#if DEBUG
+                    Console.WriteLine(message);
+#endif
+                    var package = Global.UnpackPackage(message);
+                    Port target = Port.Parse(package[1]);
+                    if (target == LocalPort) {
+                        // Handle package here
+                    }
+                    else {
+                        if (Global.RoutingTable.ContainsKey(target))
+                            Global.RoutingTable[target].SendMessage(message);
+                        else {
+                            // Can't deliver package
+                            Console.WriteLine("Error: Package for {0} can't be delivered. Package info: {1}".Formatter(target, message));
+                        }
+                    }
                 }
             }
         }
@@ -114,16 +147,24 @@ namespace CC {
             // Send update to all connected clients
         }
 
-        static void ConnectTo(short port) {
+        static void ConnectTo(Port port) {
             // Connect to port
             try {
+#if DEBUG
                 Console.WriteLine("Starting attempt");
+#endif
                 var client = new TcpClient("localhost", port);
+#if DEBUG
                 Console.WriteLine("Connected");
+#endif
                 ProcessClient(port, client);
+#if DEBUG
                 Console.WriteLine("Processed");
-                Globals.RoutingTable[port].SendMessage("{0}{1}".Formatter(Globals.ConnectionMessage, LocalPort));
+#endif
+                Global.RoutingTable[port].SendMessage(Global.CreatePackage(Global.PackageNames.Connection, port, "{0}{1}".Formatter(Global.Strings.ConnectionMessage, LocalPort)));
+#if DEBUG
                 Console.WriteLine("Handshaken");
+#endif
             } // 
             catch {
                 Console.WriteLine("Sleep");
@@ -131,22 +172,22 @@ namespace CC {
             }
         }
 
-        private static void ProcessClient(short port, TcpClient client) {
+        private static void ProcessClient(Port port, TcpClient client) {
             var nb = new Neighbor(port, client);
-            Globals.RoutingTable.Add(port, new Row() { NBu = nb });
+            Global.RoutingTable.Add(port, new Row() { NBu = nb });
 
             Thread listenForMessages = new Thread(() => ListenTo(client));
             listenForMessages.Start();
             //throw new NotImplementedException();
         }
 
-        static void PrintRoutingTable(short localPort) {
+        static void PrintRoutingTable(Port localPort) {
             string rowSeparator = "+-----+-+-----+";
             Console.WriteLine("Routing Table");
             Console.WriteLine(rowSeparator);
             Console.WriteLine("|Node |D|   Nb|");
             Console.WriteLine(rowSeparator);
-            foreach (var row in Globals.RoutingTable) {
+            foreach (var row in Global.RoutingTable) {
                 if (row.Key == localPort)
                     Console.WriteLine("|{0}|0|local|", "{0,5:#####}".Formatter(localPort));
                 else
@@ -160,7 +201,7 @@ namespace CC {
         /// <summary>
         /// Distance from node u to node v
         /// </summary>
-        public short Du;
+        public int Du;
 
         /// <summary>
         /// Preferred neighbor w of node u to reach node v
@@ -185,7 +226,7 @@ namespace CC {
         TcpClient client;
         StreamWriter writer;
 
-        public Neighbor(short port, TcpClient client) {
+        public Neighbor(Port port, TcpClient client) {
             this.client = client;
             this.Port = port;
             if (client != null) {
