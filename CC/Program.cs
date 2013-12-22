@@ -61,7 +61,7 @@ namespace CC {
             Console.WriteLine("Debugging mode");
 #endif
             if (args.Length == 0) {
-                args = new string[] { "1000", "1001" };
+                args = new string[] { "1002", "1001" };
             }
             int iterator = 0;
             if (args[0][0] == 'p') {
@@ -174,7 +174,8 @@ namespace CC {
 
         private static void ProcessClient(Port port, TcpClient client) {
             var nb = new Neighbor(port, client);
-            Global.RoutingTable.Add(port, new Row() { NBu = nb });
+            Global.RoutingTable.Add(port, new Row() { NBu = nb , Du = 1 });
+            Global.RoutingTable[port].NDISu.Add(port, 0);
 
             Thread listenForMessages = new Thread(() => ListenTo(client));
             listenForMessages.Start();
@@ -188,10 +189,10 @@ namespace CC {
             Console.WriteLine("|Node |D|   Nb|");
             Console.WriteLine(rowSeparator);
             foreach (var row in Global.RoutingTable) {
-                if (row.Key == localPort)
-                    Console.WriteLine("|{0}|0|local|", "{0,5:#####}".Formatter(localPort));
-                else
-                    Console.WriteLine("|{0}|{1}|{2}|", "{0,5:#####}".Formatter(row.Key), row.Value.Du, "{0,5:#####}".Formatter(row.Value.NBu.Port));
+                Console.WriteLine("|{0}|{1}|{2}|", 
+                    "{0,5:#####}".Formatter(row.Key), 
+                    row.Value.Du, 
+                    "{0,5:#####}".Formatter(row.Value.NBu.Port == localPort ? "local" : row.Value.NBu.Port.ToString()));
             }
             Console.WriteLine(rowSeparator);
         }
