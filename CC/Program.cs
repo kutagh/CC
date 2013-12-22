@@ -103,7 +103,7 @@ namespace CC {
                 if (input.StartsWith("C")) {
                     Port target;
                     if (Port.TryParse(input.Split(' ')[1], out target)) {
-                        
+                        ConnectTo(target);
                     }
                     else
                         Console.WriteLine(Global.Strings.parameterError, "connect", "port", "a valid port number");
@@ -114,6 +114,10 @@ namespace CC {
                     var split = input.Split(' ');
                     Port target;
                     if (split.Length > 2 && Port.TryParse(split[1], out target)) {
+                        if (!IsInPartition(target) || target == LocalPort) {
+                            Console.WriteLine(Global.Strings.parameterError, "broadcast", "port", "a valid port number that is connected to the current node");
+                            continue;
+                        }
                         var message = new StringBuilder(split[2]);
                         for (int i = 3; i < split.Length; i++)
                             message.AppendFormat(" {0}", split[i]);
@@ -179,6 +183,8 @@ namespace CC {
                     Port target = Port.Parse(package[1]);
                     if (target == LocalPort) {
                         // Handle package here
+                        if (package[0] == Global.PackageNames.Broadcast)
+                            Console.WriteLine(package[2]);
                     }
                     else {
                         if (Global.RoutingTable.ContainsKey(target))
@@ -192,6 +198,10 @@ namespace CC {
                     }
                 }
             }
+        }
+
+        static bool IsInPartition(Port port) {
+            return Global.RoutingTable.ContainsKey(port) && Global.RoutingTable[port].Du < Global.maxDistance;
         }
 
         static void OnClientChange() {
@@ -218,7 +228,9 @@ namespace CC {
 #endif
             } // 
             catch {
-                Console.WriteLine("Sleep");
+#if DEBUG
+                Console.WriteLine("Sleep"); 
+#endif
                 Thread.Sleep(10); ConnectTo(port); 
             }
         }
