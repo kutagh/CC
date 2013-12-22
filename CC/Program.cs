@@ -96,8 +96,15 @@ namespace CC {
                 }
                 if (input.StartsWith("D")) {
                     Port target;
-
-                    Console.WriteLine(Global.Strings.parameterError, "delete", "port", "a valid port number");
+                    if (Port.TryParse(input.Split(' ')[1], out target)) {
+                        if (Neighbors().Any(x => x.Port == target)) {
+                            Global.RoutingTable[target].SendMessage(Global.CreatePackage(Global.PackageNames.Disconnect, target));
+                        }
+                        else
+                            Console.WriteLine(Global.Strings.parameterError, "delete", "port", "a valid port number that is connected to this node");
+                    }
+                    else
+                        Console.WriteLine(Global.Strings.parameterError, "delete", "port", "a valid port number");
                     continue;
                 }
                 if (input.StartsWith("C")) {
@@ -185,6 +192,9 @@ namespace CC {
                         // Handle package here
                         if (package[0] == Global.PackageNames.Broadcast)
                             Console.WriteLine(package[2]);
+                        else if (package[0] == Global.PackageNames.Disconnect) {
+                            // Handle disconnect
+                        }
                     }
                     else {
                         if (Global.RoutingTable.ContainsKey(target))
@@ -202,6 +212,10 @@ namespace CC {
 
         static bool IsInPartition(Port port) {
             return Global.RoutingTable.ContainsKey(port) && Global.RoutingTable[port].Du < Global.maxDistance;
+        }
+
+        static IEnumerable<Neighbor> Neighbors() {
+            return Global.RoutingTable.Where(x => x.Value.Du == 1).Select(x => x.Value.NBu);
         }
 
         static void OnClientChange() {
