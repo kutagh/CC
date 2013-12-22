@@ -43,7 +43,7 @@ namespace CC {
                 SetWindowPos(MyConsole, 0, x, y, 0, 0, SWP_NOSIZE);
                 Console.Title = "port = {0}, x = {1}, y = {2}".Formatter(args[iterator], x, y); // Port number
             } // In both cases, set the proper requested console title
-            else { 
+            else {
                 Console.Title = "port = {0}".Formatter(args[iterator]); // Port number
             }
             // Initialize routing table
@@ -54,32 +54,88 @@ namespace CC {
             // Start listener service first
             Thread listener = new Thread(() => ListenAt(LocalPort));
             listener.Start();
-            
+
             // Connect to other ports
             while (++iterator < args.Length) {
                 Port port = Port.Parse(args[iterator]);
 #if DEBUG
-                Console.WriteLine(port); 
+                Console.WriteLine(port);
 #endif
                 if (port > LocalPort) ConnectTo(port);
 #if DEBUG
-                else Console.WriteLine("Skipped"); 
+                else Console.WriteLine("Skipped");
 #endif
             }
 #if DEBUG
-            Console.WriteLine("Connected to them all"); 
+            Console.WriteLine("Connected to them all");
 #endif
             foreach (var kvp in Global.RoutingTable) {
                 if (kvp.Key != LocalPort) {
 #if DEBUG
-                    Console.WriteLine("Sending message to {0}".Formatter(kvp.Key)); 
+                    Console.WriteLine("Sending message to {0}".Formatter(kvp.Key));
 #endif
-                    kvp.Value.SendMessage(Global.CreatePackage("Broadcast", kvp.Key, "Hello from {0}".Formatter(LocalPort)));
+                    kvp.Value.SendMessage(Global.CreatePackage(Global.PackageNames.Broadcast, kvp.Key, "Hello from {0}".Formatter(LocalPort)));
                 }
             }
-            
-        }
 
+            // Input handling
+
+            while (true) {
+                var input = Console.ReadLine();
+                if (input.StartsWith("S")) {
+
+                    Console.WriteLine(Global.Strings.parameterError, "slowdown", "n", "a positive number");
+                    continue;
+                }
+                if (input.StartsWith("R")) {
+                    PrintRoutingTable();
+                    continue;
+                }
+                if (input.StartsWith("M")) {
+                    continue;
+                }
+                if (input.StartsWith("D")) {
+                    Port target;
+
+                    Console.WriteLine(Global.Strings.parameterError, "delete", "port", "a valid port number");
+                    continue;
+                }
+                if (input.StartsWith("C")) {
+                    Port target;
+                    if (Port.TryParse(input.Split(' ')[1], out target)) {
+                        
+                    }
+                    else
+                        Console.WriteLine(Global.Strings.parameterError, "connect", "port", "a valid port number");
+                    
+                    continue;
+                }
+                if (input.StartsWith("B")) {
+                    var split = input.Split(' ');
+                    Port target;
+                    if (split.Length > 2 && Port.TryParse(split[1], out target)) {
+                        var message = new StringBuilder(split[2]);
+                        for (int i = 3; i < split.Length; i++)
+                            message.AppendFormat(" {0}", split[i]);
+                        var msg = Global.CreatePackage("Broadcast", target, message.ToString());
+                        var sendTo = Global.RoutingTable[target].NBu;
+#if DEBUG
+                        Console.WriteLine("About to broadcast {0} to port {1} via port {2}", msg, target, sendTo);
+#endif
+                        sendTo.SendMessage(msg);
+#if DEBUG
+                        Console.WriteLine("Sent message to {0}", target);
+#endif
+                        continue;
+                    }
+                    if (split.Length > 2)
+                        Console.WriteLine(Global.Strings.parameterError, "broadcast", "port", "a valid port number");
+                    else
+                        Console.WriteLine(Global.Strings.parameterError, "broadcast", "message", "a valid message");
+                    continue;
+                }
+            }
+        }
         static void ListenAt(Port port) {
 #if DEBUG
             Console.WriteLine("Listening at {0}".Formatter(port)); 
@@ -115,6 +171,10 @@ namespace CC {
 #if DEBUG
                     Console.WriteLine(message);
 #endif
+                    if (!message.IsValidPackage()) {
+                        // Error handling, not a valid package, would cause exceptions.
+                        continue;
+                    }
                     var package = Global.UnpackPackage(message);
                     Port target = Port.Parse(package[1]);
                     if (target == LocalPort) {
@@ -173,7 +233,7 @@ namespace CC {
             //throw new NotImplementedException();
         }
 
-        static void PrintRoutingTable(Port localPort) {
+        static void PrintRoutingTable() {
             string rowSeparator = "+-----+-+-----+";
             Console.WriteLine("Routing Table");
             Console.WriteLine(rowSeparator);
@@ -183,9 +243,13 @@ namespace CC {
                 Console.WriteLine("|{0}|{1}|{2}|", 
                     "{0,5:#####}".Formatter(row.Key), 
                     row.Value.Du, 
-                    "{0,5:#####}".Formatter(row.Value.NBu.Port == localPort ? "local" : row.Value.NBu.Port.ToString()));
+                    "{0,5:#####}".Formatter(row.Value.NBu.Port == LocalPort ? "local" : row.Value.NBu.Port.ToString()));
             }
             Console.WriteLine(rowSeparator);
+        }
+
+        static void BroadcastRoutingTableChanges() {
+            //
         }
     }
 }
