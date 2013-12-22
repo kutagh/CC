@@ -98,7 +98,8 @@ namespace CC {
                     Port target;
                     if (Port.TryParse(input.Split(' ')[1], out target)) {
                         if (Neighbors().Any(x => x.Port == target)) {
-                            Global.RoutingTable[target].SendMessage(Global.CreatePackage(Global.PackageNames.Disconnect, target));
+                            Global.RoutingTable[target].SendMessage(Global.CreatePackage(Global.PackageNames.Disconnect, target, LocalPort.ToString()));
+                            Disconnect(target);
                         }
                         else
                             Console.WriteLine(Global.Strings.parameterError, "delete", "port", "a valid port number that is connected to this node");
@@ -192,9 +193,9 @@ namespace CC {
                         // Handle package here
                         if (package[0] == Global.PackageNames.Broadcast)
                             Console.WriteLine(package[2]);
-                        else if (package[0] == Global.PackageNames.Disconnect) {
-                            // Handle disconnect
-                        }
+                        else if (package[0] == Global.PackageNames.Disconnect)
+                            Disconnect(Port.Parse(package[2]));
+                        
                     }
                     else {
                         if (Global.RoutingTable.ContainsKey(target))
@@ -208,6 +209,10 @@ namespace CC {
                     }
                 }
             }
+        }
+
+        private static void Disconnect(Port p) {
+            throw new NotImplementedException();
         }
 
         static bool IsInPartition(Port port) {
