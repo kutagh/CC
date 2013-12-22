@@ -36,17 +36,17 @@ namespace CC {
             if (args.Length == 0) {
                 args = new string[] { "1002", "1001" };
             }
-            int iterator = 0;
+            int iterator = 0; // For easier handling of the args array, since we have two optional parameters but we always know when they can appear
             if (args[0][0] == 'p') {
                 // Set console position
                 int x = int.Parse(args[iterator++].Substring(1)), y = int.Parse(args[iterator++].Substring(1));
                 SetWindowPos(MyConsole, 0, x, y, 0, 0, SWP_NOSIZE);
                 Console.Title = "port = {0}, x = {1}, y = {2}".Formatter(args[iterator], x, y); // Port number
-            }
-            else {
+            } // In both cases, set the proper requested console title
+            else { 
                 Console.Title = "port = {0}".Formatter(args[iterator]); // Port number
             }
-            // Main listener
+            // Initialize routing table
             LocalPort = Port.Parse(args[iterator]);
             var local = new Neighbor(LocalPort, null);
             Global.RoutingTable.Add(LocalPort, new Row() { NBu = local, Du = 0 });
@@ -58,7 +58,9 @@ namespace CC {
             // Connect to other ports
             while (++iterator < args.Length) {
                 Port port = Port.Parse(args[iterator]);
-                Console.WriteLine(port);
+#if DEBUG
+                Console.WriteLine(port); 
+#endif
                 if (port > LocalPort) ConnectTo(port);
 #if DEBUG
                 else Console.WriteLine("Skipped"); 
@@ -72,7 +74,7 @@ namespace CC {
 #if DEBUG
                     Console.WriteLine("Sending message to {0}".Formatter(kvp.Key)); 
 #endif
-                    kvp.Value.SendMessage("Hello from {0}".Formatter(LocalPort));
+                    kvp.Value.SendMessage(Global.CreatePackage("Broadcast", kvp.Key, "Hello from {0}".Formatter(LocalPort)));
                 }
             }
             
