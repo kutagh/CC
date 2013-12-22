@@ -16,34 +16,7 @@ using System.Threading.Tasks;
 using Port = System.Int16;
 
 namespace CC {
-    public static class Global {
-        public static class Strings {
-            public static string ConnectionMessage = "Connection from";
-            public static string parameterError = "The {0} parameter '{1}' was not correct, please enter {2}.";
-        }
-
-        public static class PackageNames {
-            public static string Connection = "Connection Handshake";
-            public static string Disconnect = "Disconnect message";
-            public static string Broadcast  = "Broadcast";
-        }
-        public static Dictionary<Port, Row> RoutingTable = new Dictionary<Port, Row>();
-
-        public static string Formatter(this string s, params object[] parameters) { return string.Format(s, parameters); }
-
-
-        static char separator = '|';
-
-        public static string CreatePackage(string packageName, Port destination, string payload) {
-            return "{0}{3}{1}{3}{2}".Formatter(packageName, destination, payload, separator);
-        }
-
-        public static string[] UnpackPackage(string package) {
-            if (package.Count(x => x == separator) == 2)
-                return package.Split(separator);
-            else return new string[] { package };
-        }
-    }
+    
     class NetwProg {
         #region Console Window code
         const int SWP_NOSIZE = 0x0001; //Ignores the resize parameters when calling SetWindowPos.
@@ -87,12 +60,18 @@ namespace CC {
                 Port port = Port.Parse(args[iterator]);
                 Console.WriteLine(port);
                 if (port > LocalPort) ConnectTo(port);
-                else Console.WriteLine("Skipped");
+#if DEBUG
+                else Console.WriteLine("Skipped"); 
+#endif
             }
-            Console.WriteLine("Connected to them all");
+#if DEBUG
+            Console.WriteLine("Connected to them all"); 
+#endif
             foreach (var kvp in Global.RoutingTable) {
                 if (kvp.Key != LocalPort) {
-                    Console.WriteLine("Sending message to {0}".Formatter(kvp.Key));
+#if DEBUG
+                    Console.WriteLine("Sending message to {0}".Formatter(kvp.Key)); 
+#endif
                     kvp.Value.SendMessage("Hello from {0}".Formatter(LocalPort));
                 }
             }
@@ -100,18 +79,26 @@ namespace CC {
         }
 
         static void ListenAt(Port port) {
-            Console.WriteLine("Listening at {0}".Formatter(port));
+#if DEBUG
+            Console.WriteLine("Listening at {0}".Formatter(port)); 
+#endif
             TcpListener listener = new TcpListener(System.Net.IPAddress.Any, port);
             listener.Start();
             while (true) {
                 // Receive client connections and process them
-                Console.WriteLine("Waiting for connection");
+#if DEBUG
+                Console.WriteLine("Waiting for connection"); 
+#endif
                 var client = listener.AcceptTcpClient();
-                Console.WriteLine("Received incoming connection");
+#if DEBUG
+                Console.WriteLine("Received incoming connection"); 
+#endif
                 var reader = new StreamReader(client.GetStream());
                 var package = Global.UnpackPackage(reader.ReadLine());
                 while (package[0] != Global.PackageNames.Connection) { // Error handling
-                    Console.WriteLine("Error: Unexpected package received, dropping package.");
+#if DEBUG
+                    Console.WriteLine("Error: Unexpected package received, dropping package."); 
+#endif
                     package = Global.UnpackPackage(reader.ReadLine());
                 }
                 ProcessClient(Port.Parse(package[2].Substring(Global.Strings.ConnectionMessage.Length)), client); // Need to acquire proper port number.
@@ -136,7 +123,9 @@ namespace CC {
                             Global.RoutingTable[target].SendMessage(message);
                         else {
                             // Can't deliver package
-                            Console.WriteLine("Error: Package for {0} can't be delivered. Package info: {1}".Formatter(target, message));
+#if DEBUG
+                            Console.WriteLine("Error: Package for {0} can't be delivered. Package info: {1}".Formatter(target, message)); 
+#endif
                         }
                     }
                 }
@@ -196,50 +185,5 @@ namespace CC {
             }
             Console.WriteLine(rowSeparator);
         }
-    }
-
-    public class Row {
-        /// <summary>
-        /// Distance from node u to node v
-        /// </summary>
-        public int Du;
-
-        /// <summary>
-        /// Preferred neighbor w of node u to reach node v
-        /// </summary>
-        public Neighbor NBu;
-
-        /// <summary>
-        /// Dictionary that contains all distances of other nodes to node v, as known by node u
-        /// </summary>
-        public Dictionary<Port, int> NDISu = new Dictionary<Port, int>();
-
-        public void SendMessage(string message) {
-            if (NBu == null) // Can't send whatsoever...
-                return; // Might want to throw an error...
-            // Send to NBu
-            NBu.SendMessage(message);
-        }
-    }
-
-    public class Neighbor {
-        public Port Port { get; protected set; }
-        TcpClient client;
-        StreamWriter writer;
-
-        public Neighbor(Port port, TcpClient client) {
-            this.client = client;
-            this.Port = port;
-            if (client != null) {
-                writer = new StreamWriter(client.GetStream());
-                writer.AutoFlush = true;
-            }
-        }
-
-        public void SendMessage(string message) {
-            message.Trim();
-            writer.WriteLine(message);
-        }
-
     }
 }
