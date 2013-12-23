@@ -212,7 +212,8 @@ namespace CC {
         }
 
         private static void Disconnect(Port p) {
-            throw new NotImplementedException();
+            Global.Threads[p].Abort();
+            Global.Threads.Remove(p);
         }
 
         static bool IsInPartition(Port port) {
@@ -259,7 +260,8 @@ namespace CC {
             Global.RoutingTable.Add(port, new Row() { NBu = nb , Du = 1 });
             Global.RoutingTable[port].NDISu.Add(port, 0);
 
-            Thread listenForMessages = new Thread(() => ListenTo(client));
+            var listenForMessages = new Thread(() => ListenTo(client));
+            Global.Threads.Add(port, listenForMessages);
             listenForMessages.Start();
             //throw new NotImplementedException();
         }

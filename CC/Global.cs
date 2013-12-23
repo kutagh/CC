@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Port = System.Int16;
 
@@ -18,13 +19,14 @@ namespace CC {
             public static string Broadcast  = "Broadcast";
         }
         public static Dictionary<Port, Row> RoutingTable = new Dictionary<Port, Row>();
-
+        public static Dictionary<Port, Thread> Threads = new Dictionary<Port,Thread>();
         public static string Formatter(this string s, params object[] parameters) { return string.Format(s, parameters); }
 
 
         static char separator = '|';
+        public static int maxDistance = 50;
 
-        public static string CreatePackage(string packageName, Port destination, string payload) {
+        public static string CreatePackage(string packageName, Port destination, string payload = "no payload") {
             return "{0}{3}{1}{3}{2}".Formatter(packageName, destination, payload, separator);
         }
 
@@ -32,6 +34,10 @@ namespace CC {
             if (package.Count(x => x == separator) == 2)
                 return package.Split(separator);
             else return new string[] { package };
+        }
+
+        public static bool IsValidPackage(this string package) {
+            return package.Count(x => x == separator) == 2;
         }
     }
 }
