@@ -1,6 +1,0 @@
-p:\documents\visual studio 2012\Projects\CC\CC\obj\Debug\CC.csprojResolveAssemblyReference.cache
-p:\documents\visual studio 2012\Projects\CC\CC\bin\Debug\NetwProg.exe.config
-p:\documents\visual studio 2012\Projects\CC\CC\bin\Debug\NetwProg.exe
-p:\documents\visual studio 2012\Projects\CC\CC\bin\Debug\NetwProg.pdb
-p:\documents\visual studio 2012\Projects\CC\CC\obj\Debug\NetwProg.exe
-p:\documents\visual studio 2012\Projects\CC\CC\obj\Debug\NetwProg.pdb
