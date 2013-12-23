@@ -34,11 +34,11 @@ namespace CC {
 
     public class Neighbor {
         public Port Port { get; protected set; }
-        TcpClient client;
+        public TcpClient Client { get; protected set; }
         StreamWriter writer;
 
         public Neighbor(Port port, TcpClient client) {
-            this.client = client;
+            this.Client = client;
             this.Port = port;
             if (client != null) {
                 writer = new StreamWriter(client.GetStream());

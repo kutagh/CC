@@ -214,6 +214,10 @@ namespace CC {
         private static void Disconnect(Port p) {
             Global.Threads[p].Abort();
             Global.Threads.Remove(p);
+            var node = Global.RoutingTable[p].NBu;
+            if (node.Port == p) {
+                node.Client.Close();
+            }
         }
 
         static bool IsInPartition(Port port) {
@@ -224,7 +228,7 @@ namespace CC {
             return Global.RoutingTable.Where(x => x.Value.Du == 1).Select(x => x.Value.NBu);
         }
 
-        static void OnClientChange() {
+        static void OnRoutingChange() {
             // Send update to all connected clients
         }
 
