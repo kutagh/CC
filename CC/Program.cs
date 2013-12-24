@@ -69,14 +69,7 @@ namespace CC {
 #if DEBUG
             Console.WriteLine("Connected to them all");
 #endif
-            foreach (var kvp in Global.RoutingTable) {
-                if (kvp.Key != LocalPort) {
-#if DEBUG
-                    Console.WriteLine("Sending message to {0}".Formatter(kvp.Key));
-#endif
-                    kvp.Value.SendMessage(Global.CreatePackage(Global.PackageNames.Broadcast, kvp.Key, "Hello from {0}".Formatter(LocalPort)));
-                }
-            }
+
 
             // Input handling
 
@@ -189,57 +182,67 @@ namespace CC {
 #endif
                     package = Global.UnpackPackage(reader.ReadLine());
                 }
+#if DEBUG
+                Console.WriteLine("Processing connection");
+#endif
                 ProcessClient(Port.Parse(package[2].Substring(Global.Strings.ConnectionMessage.Length)), client); // Need to acquire proper port number.
 
             }
         }
 
-        static void ListenTo(TcpClient client) {
-            using (StreamReader reader = new StreamReader(client.GetStream())) {
-                while (true) {
-                    var message = reader.ReadLine();
+        static void ListenTo(Port port, TcpClient client) {
+            try {
+                using (StreamReader reader = new StreamReader(client.GetStream())) {
+                    while (true) {
+                        var message = reader.ReadLine();
 #if DEBUG
-                    Console.WriteLine(message);
+                        Console.WriteLine(message);
 #endif
-                    Thread.Sleep(Global.Slowdown); // Sleep if required
-                    
-                    if (!message.IsValidPackage()) {
-                        // Error handling, not a valid package, would cause exceptions.
-                        continue;
-                    }
-                    var package = Global.UnpackPackage(message);
-                    Port target = Port.Parse(package[1]);
-                    if (target == LocalPort) {
-                        // Handle package here
-                        if (package[0] == Global.PackageNames.Broadcast)
-                            Console.WriteLine(package[2]);
-                        else if (package[0] == Global.PackageNames.Disconnect)
-                            Disconnect(Port.Parse(package[2]));
-                        
-                    }
-                    else {
-                        if (Global.RoutingTable.ContainsKey(target)) {
-                            Global.RoutingTable[target].SendMessage(message);
-                            Console.WriteLine("Bericht voor {0} verzonden naar {1}".Formatter(target, Global.RoutingTable[target].NBu.Port));
+                        Thread.Sleep(Global.Slowdown); // Sleep if required
+
+                        if (!message.IsValidPackage()) {
+                            // Error handling, not a valid package, would cause exceptions.
+                            continue;
+                        }
+                        var package = Global.UnpackPackage(message);
+                        Port target = Port.Parse(package[1]);
+                        if (target == LocalPort) {
+                            // Handle package here
+                            if (package[0] == Global.PackageNames.Broadcast)
+                                Console.WriteLine(package[2]);
+                            else if (package[0] == Global.PackageNames.Disconnect)
+                                Disconnect(Port.Parse(package[2]));
+
                         }
                         else {
-                            // Can't deliver package
+                            if (Global.RoutingTable.ContainsKey(target)) {
+                                Global.RoutingTable[target].SendMessage(message);
+                                Console.WriteLine("Bericht voor {0} verzonden naar {1}".Formatter(target, Global.RoutingTable[target].NBu.Port));
+                            }
+                            else {
+                                // Can't deliver package
 #if DEBUG
-                            Console.WriteLine("Error: Package for {0} can't be delivered. Package info: {1}".Formatter(target, message));
+                                Console.WriteLine("Error: Package for {0} can't be delivered. Package info: {1}".Formatter(target, message));
 #endif
+                            }
                         }
                     }
                 }
             }
+            catch {
+                Disconnect(port);
+            }
         }
 
-        private static void Disconnect(Port p) {
+        public static void Disconnect(Port p) {
             Global.Threads[p].Abort();
             Global.Threads.Remove(p);
             var node = Global.RoutingTable[p].NBu;
             if (node.Port == p) {
                 node.Client.Close();
             }
+            Global.RoutingTable[p].NDISu.Remove(p);
+            Global.RoutingTable[p].Du = Global.MaxDistance;
             if (Global.Verbose)
                 Console.WriteLine("Verbinding verbroken met node {0}".Formatter(p));
         }
@@ -275,9 +278,9 @@ namespace CC {
                 Console.WriteLine("Handshaken");
 #endif
             } // 
-            catch {
+            catch (Exception e) {
 #if DEBUG
-                Console.WriteLine("Sleep"); 
+                Console.WriteLine("Exception: {0}. \nSleep", e); 
 #endif
                 Thread.Sleep(10); ConnectTo(port); 
             }
@@ -285,10 +288,15 @@ namespace CC {
 
         private static void ProcessClient(Port port, TcpClient client) {
             var nb = new Neighbor(port, client);
-            Global.RoutingTable.Add(port, new Row() { NBu = nb , Du = 1 });
-            Global.RoutingTable[port].NDISu.Add(port, 0);
+            if (!Global.RoutingTable.ContainsKey(port)) {
+                Global.RoutingTable.Add(port, new Row() { NBu = nb, Du = 1 });
+                Global.RoutingTable[port].NDISu.Add(port, 0);
+            }
+            else {
+                Global.RoutingTable[port].NBu = nb;
+            }
 
-            var listenForMessages = new Thread(() => ListenTo(client));
+            var listenForMessages = new Thread(() => ListenTo(port, client));
             Global.Threads.Add(port, listenForMessages);
             listenForMessages.Start();
 

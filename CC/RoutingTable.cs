@@ -25,8 +25,15 @@ namespace CC {
         public Dictionary<Port, int> NDISu = new Dictionary<Port, int>();
 
         public void SendMessage(string message) {
-            if (NBu == null) // Can't send whatsoever...
-                return; // Might want to throw an error...
+            if (NBu == null) {// Can't send whatsoever...
+                if (NDISu.Count() == 0)
+                    return; // Might want to throw an error...
+                else { 
+                    // Fix it
+                    throw new NotImplementedException();
+                }
+
+            }
             // Send to NBu
             NBu.SendMessage(message);
         }
@@ -47,8 +54,13 @@ namespace CC {
         }
 
         public void SendMessage(string message) {
-            message.Trim();
-            writer.WriteLine(message);
+            try {
+                message.Trim();
+                writer.WriteLine(message);
+            }
+            catch {
+                NetwProg.Disconnect(Port);
+            }
         }
 
     }
