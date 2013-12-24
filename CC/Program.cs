@@ -83,7 +83,13 @@ namespace CC {
             while (true) {
                 var input = Console.ReadLine();
                 if (input.StartsWith("S")) {
-
+                    var prev = Global.Slowdown;
+                    if(int.TryParse(input.Substring(2), out Global.Slowdown)) {
+                        if (Global.Slowdown < 0) {
+                            Global.Slowdown = prev;
+                            Console.WriteLine(Global.Strings.parameterError, "slowdown", "n", "a positive number");
+                        }
+                    }
                     Console.WriteLine(Global.Strings.parameterError, "slowdown", "n", "a positive number");
                     continue;
                 }
@@ -92,6 +98,17 @@ namespace CC {
                     continue;
                 }
                 if (input.StartsWith("M")) {
+                    Console.WriteLine("Total number of distance estimates sent by this node: {0}".Formatter(Global.DistanceEstimates));
+                    continue;
+                }
+                if (input.StartsWith("T")) {
+                    input = input.Substring(2).Trim();
+                    if (input.Equals("off", StringComparison.InvariantCultureIgnoreCase))
+                        Global.Verbose = false;
+                    else if (input.Equals("on", StringComparison.InvariantCultureIgnoreCase))
+                        Global.Verbose = true;
+                    else
+                        Console.WriteLine(Global.Strings.parameterError, "toggle", "state", "on or off");
                     continue;
                 }
                 if (input.StartsWith("D")) {
@@ -146,6 +163,7 @@ namespace CC {
                         Console.WriteLine(Global.Strings.parameterError, "broadcast", "message", "a valid message");
                     continue;
                 }
+                Console.WriteLine("You entered an invalid command. Please retry");
             }
         }
         static void ListenAt(Port port) {
@@ -183,6 +201,8 @@ namespace CC {
 #if DEBUG
                     Console.WriteLine(message);
 #endif
+                    Thread.Sleep(Global.Slowdown); // Sleep if required
+                    
                     if (!message.IsValidPackage()) {
                         // Error handling, not a valid package, would cause exceptions.
                         continue;
@@ -198,12 +218,14 @@ namespace CC {
                         
                     }
                     else {
-                        if (Global.RoutingTable.ContainsKey(target))
+                        if (Global.RoutingTable.ContainsKey(target)) {
                             Global.RoutingTable[target].SendMessage(message);
+                            Console.WriteLine("Bericht voor {0} verzonden naar {1}".Formatter(target, Global.RoutingTable[target].NBu.Port));
+                        }
                         else {
                             // Can't deliver package
 #if DEBUG
-                            Console.WriteLine("Error: Package for {0} can't be delivered. Package info: {1}".Formatter(target, message)); 
+                            Console.WriteLine("Error: Package for {0} can't be delivered. Package info: {1}".Formatter(target, message));
 #endif
                         }
                     }
@@ -218,10 +240,12 @@ namespace CC {
             if (node.Port == p) {
                 node.Client.Close();
             }
+            if (Global.Verbose)
+                Console.WriteLine("Verbinding verbroken met node {0}".Formatter(p));
         }
 
         static bool IsInPartition(Port port) {
-            return Global.RoutingTable.ContainsKey(port) && Global.RoutingTable[port].Du < Global.maxDistance;
+            return Global.RoutingTable.ContainsKey(port) && Global.RoutingTable[port].Du < Global.MaxDistance;
         }
 
         static IEnumerable<Neighbor> Neighbors() {
@@ -267,7 +291,9 @@ namespace CC {
             var listenForMessages = new Thread(() => ListenTo(client));
             Global.Threads.Add(port, listenForMessages);
             listenForMessages.Start();
-            //throw new NotImplementedException();
+
+            if (Global.Verbose)
+                Console.WriteLine("Nieuwe verbinding met node {0}".Formatter(port));
         }
 
         static void PrintRoutingTable() {

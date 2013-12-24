@@ -24,7 +24,10 @@ namespace CC {
 
 
         static char separator = '|';
-        public static int maxDistance = 50;
+        public static int MaxDistance = 50;
+        public static int Slowdown = 0;
+        public static int DistanceEstimates = 0;
+        public static bool Verbose = false;
 
         public static string CreatePackage(string packageName, Port destination, string payload = "no payload") {
             return "{0}{3}{1}{3}{2}".Formatter(packageName, destination, payload, separator);
