@@ -85,6 +85,10 @@ namespace CC {
                     // Unreachable node
                 }
             }
+
+            // Update everyone
+
+            dirty.Clear();
         }
 
     }
