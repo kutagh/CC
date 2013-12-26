@@ -70,12 +70,14 @@ namespace CC {
         public static void AddDirty(Port port) {
             dirty.Add(port);
         }
-        static List<Port> dirty = new List<Port>();
+        static HashSet<Port> dirty = new HashSet<Port>();
 
         public static void Update() {
+            var announceChanges = new List<Port>();
             foreach (var port in dirty) {
                 if (port == Global.LocalPort) continue;
                 var row = Global.RoutingTable[port];
+                var oldDu = row.Du;
                 if (row.NDISu.Count > 0) {
                     var best = row.NDISu.GetMinimum();
                     row.NBu = best.Key;
@@ -83,10 +85,13 @@ namespace CC {
                 }
                 else {
                     // Unreachable node
+                    
                 }
+                if (row.Du != oldDu)
+                    announceChanges.Add(port);
             }
 
-            // Update everyone
+            // Update everyone about the changes in announceChanges
 
             dirty.Clear();
         }
