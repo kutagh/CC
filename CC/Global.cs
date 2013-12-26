@@ -20,6 +20,7 @@ namespace CC {
         }
         public static Dictionary<Port, Row> RoutingTable = new Dictionary<Port, Row>();
         public static Dictionary<Port, Thread> Threads = new Dictionary<Port,Thread>();
+        public static Dictionary<Port, Neighbor> Neighbors = new Dictionary<Port, Neighbor>();
         public static string Formatter(this string s, params object[] parameters) { return string.Format(s, parameters); }
 
 
@@ -28,6 +29,7 @@ namespace CC {
         public static int Slowdown = 0;
         public static int DistanceEstimates = 0;
         public static bool Verbose = false;
+        public static Port LocalPort;
 
         public static string CreatePackage(string packageName, Port destination, string payload = "no payload") {
             return "{0}{3}{1}{3}{2}".Formatter(packageName, destination, payload, separator);
@@ -41,6 +43,14 @@ namespace CC {
 
         public static bool IsValidPackage(this string package) {
             return package.Count(x => x == separator) == 2;
+        }
+
+        public static KeyValuePair<T, T1> GetMinimum<T,T1>(this Dictionary<T, T1> dict) where T1 : IComparable<T1> {
+            var best = dict.FirstOrDefault();
+            foreach (var current in dict)
+                if (current.Value.CompareTo(best.Value) < 0)
+                    best = current;
+            return best;
         }
     }
 }

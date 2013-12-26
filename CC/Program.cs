@@ -28,7 +28,6 @@ namespace CC {
         [DllImport("user32.dll", EntryPoint = "SetWindowPos")]
         public static extern IntPtr SetWindowPos(IntPtr hWnd, int hWndInsertAfter, int x, int Y, int cx, int cy, int wFlags);
         #endregion
-        static Port LocalPort;
         static void Main(string[] args) {
 #if DEBUG
             Console.WriteLine("Debugging mode");
@@ -47,12 +46,12 @@ namespace CC {
                 Console.Title = "port = {0}".Formatter(args[iterator]); // Port number
             }
             // Initialize routing table
-            LocalPort = Port.Parse(args[iterator]);
-            var local = new Neighbor(LocalPort, null);
-            Global.RoutingTable.Add(LocalPort, new Row() { NBu = local, Du = 0 });
-
+            Global.LocalPort = Port.Parse(args[iterator]);
+            var local = new Neighbor(Global.LocalPort, null);
+            Global.RoutingTable.Add(Global.LocalPort, new Row() { NBu = Global.LocalPort, Du = 0 });
+            Console.WriteLine(Global.RoutingTable[Global.LocalPort].Du);
             // Start listener service first
-            Thread listener = new Thread(() => ListenAt(LocalPort));
+            Thread listener = new Thread(() => ListenAt(Global.LocalPort));
             listener.Start();
 
             // Connect to other ports
@@ -61,7 +60,7 @@ namespace CC {
 #if DEBUG
                 Console.WriteLine(port);
 #endif
-                if (port > LocalPort) ConnectTo(port);
+                if (port > Global.LocalPort) ConnectTo(port);
 #if DEBUG
                 else Console.WriteLine("Skipped");
 #endif
@@ -107,8 +106,8 @@ namespace CC {
                 if (input.StartsWith("D")) {
                     Port target;
                     if (Port.TryParse(input.Split(' ')[1], out target)) {
-                        if (Neighbors().Any(x => x.Port == target)) {
-                            Global.RoutingTable[target].SendMessage(Global.CreatePackage(Global.PackageNames.Disconnect, target, LocalPort.ToString()));
+                        if (Global.Neighbors.ContainsKey(target)) {
+                            Global.RoutingTable[target].SendMessage(Global.CreatePackage(Global.PackageNames.Disconnect, target, Global.LocalPort.ToString()));
                             Disconnect(target);
                         }
                         else
@@ -132,7 +131,7 @@ namespace CC {
                     var split = input.Split(' ');
                     Port target;
                     if (split.Length > 2 && Port.TryParse(split[1], out target)) {
-                        if (!IsInPartition(target) || target == LocalPort) {
+                        if (!IsInPartition(target) || target == Global.LocalPort) {
                             Console.WriteLine(Global.Strings.parameterError, "broadcast", "port", "a valid port number that is connected to the current node");
                             continue;
                         }
@@ -144,7 +143,7 @@ namespace CC {
 #if DEBUG
                         Console.WriteLine("About to broadcast {0} to port {1} via port {2}", msg, target, sendTo);
 #endif
-                        sendTo.SendMessage(msg);
+                        Global.Neighbors[sendTo].SendMessage(msg);
 #if DEBUG
                         Console.WriteLine("Sent message to {0}", target);
 #endif
@@ -206,7 +205,7 @@ namespace CC {
                         }
                         var package = Global.UnpackPackage(message);
                         Port target = Port.Parse(package[1]);
-                        if (target == LocalPort) {
+                        if (target == Global.LocalPort) {
                             // Handle package here
                             if (package[0] == Global.PackageNames.Broadcast)
                                 Console.WriteLine(package[2]);
@@ -217,7 +216,7 @@ namespace CC {
                         else {
                             if (Global.RoutingTable.ContainsKey(target)) {
                                 Global.RoutingTable[target].SendMessage(message);
-                                Console.WriteLine("Bericht voor {0} verzonden naar {1}".Formatter(target, Global.RoutingTable[target].NBu.Port));
+                                Console.WriteLine("Bericht voor {0} verzonden naar {1}".Formatter(target, Global.RoutingTable[target].NBu));
                             }
                             else {
                                 // Can't deliver package
@@ -235,24 +234,25 @@ namespace CC {
         }
 
         public static void Disconnect(Port p) {
-            Global.Threads[p].Abort();
-            Global.Threads.Remove(p);
-            var node = Global.RoutingTable[p].NBu;
+            var node = Global.Neighbors[p];
             if (node.Port == p) {
                 node.Client.Close();
             }
-            Global.RoutingTable[p].NDISu.Remove(p);
             Global.RoutingTable[p].Du = Global.MaxDistance;
+            Global.RoutingTable[p].NDISu.Remove(Global.LocalPort);
+            if (Global.RoutingTable[p].NDISu.Count > 0) {
+                var shortestPath = Global.RoutingTable[p].NDISu.Aggregate((a, b) => a.Value < b.Value ? a : b);
+                Global.RoutingTable[p].Du = shortestPath.Value + Global.RoutingTable[shortestPath.Key].Du;
+            }
             if (Global.Verbose)
                 Console.WriteLine("Verbinding verbroken met node {0}".Formatter(p));
+            var th = Global.Threads[p];
+            Global.Threads.Remove(p);
+            th.Abort();
         }
 
         static bool IsInPartition(Port port) {
             return Global.RoutingTable.ContainsKey(port) && Global.RoutingTable[port].Du < Global.MaxDistance;
-        }
-
-        static IEnumerable<Neighbor> Neighbors() {
-            return Global.RoutingTable.Where(x => x.Value.Du == 1).Select(x => x.Value.NBu);
         }
 
         static void OnRoutingChange() {
@@ -273,7 +273,7 @@ namespace CC {
 #if DEBUG
                 Console.WriteLine("Processed");
 #endif
-                Global.RoutingTable[port].SendMessage(Global.CreatePackage(Global.PackageNames.Connection, port, "{0}{1}".Formatter(Global.Strings.ConnectionMessage, LocalPort)));
+                Global.RoutingTable[port].SendMessage(Global.CreatePackage(Global.PackageNames.Connection, port, "{0}{1}".Formatter(Global.Strings.ConnectionMessage, Global.LocalPort)));
 #if DEBUG
                 Console.WriteLine("Handshaken");
 #endif
@@ -288,14 +288,22 @@ namespace CC {
 
         private static void ProcessClient(Port port, TcpClient client) {
             var nb = new Neighbor(port, client);
-            if (!Global.RoutingTable.ContainsKey(port)) {
-                Global.RoutingTable.Add(port, new Row() { NBu = nb, Du = 1 });
-                Global.RoutingTable[port].NDISu.Add(port, 0);
+            while (Global.RoutingTable == null) Thread.Sleep(1);
+            while (Global.Threads == null) Thread.Sleep(1);
+            while (Global.Neighbors == null) Thread.Sleep(1);
+            try {
+                Global.RoutingTable.Add(port, new Row() { NBu = port, Du = 1 });
             }
-            else {
-                Global.RoutingTable[port].NBu = nb;
+            catch {
+                Global.RoutingTable[port].NBu = port;
+                Global.RoutingTable[port].Du = 1;
             }
-
+            try {
+                Global.RoutingTable[port].NDISu.Add(Global.LocalPort, 1);
+            }
+            catch (Exception) {
+                Global.RoutingTable[port].NDISu[Global.LocalPort] = 1;
+            }
             var listenForMessages = new Thread(() => ListenTo(port, client));
             Global.Threads.Add(port, listenForMessages);
             listenForMessages.Start();
@@ -305,16 +313,18 @@ namespace CC {
         }
 
         static void PrintRoutingTable() {
-            string rowSeparator = "+-----+-+-----+";
+            int width = Global.RoutingTable.Max(x => x.Value.Du).ToString().Length;
+            string format = "{0," + width.ToString() + ":" + new String('#', width) + "}";
+            string rowSeparator = "+-----+{0}+-----+".Formatter(new String('-', width));
             Console.WriteLine("Routing Table");
             Console.WriteLine(rowSeparator);
-            Console.WriteLine("|Node |D|   Nb|");
+            Console.WriteLine("|Node |D{0}|   Nb|", width > 0 ? new String(' ', width - 1) : "");
             Console.WriteLine(rowSeparator);
             foreach (var row in Global.RoutingTable) {
                 Console.WriteLine("|{0}|{1}|{2}|", 
                     "{0,5:#####}".Formatter(row.Key), 
-                    row.Value.Du, 
-                    "{0,5:#####}".Formatter(row.Value.NBu.Port == LocalPort ? "local" : row.Value.NBu.Port.ToString()));
+                    format.Formatter(row.Value.Du),
+                    "{0,5:#####}".Formatter(row.Value.NBu == Global.LocalPort ? "local" : row.Value.NBu.ToString()));
             }
             Console.WriteLine(rowSeparator);
         }

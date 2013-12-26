@@ -12,12 +12,12 @@ namespace CC {
         /// <summary>
         /// Distance from node u to node v
         /// </summary>
-        public int Du;
+        public int Du = Global.MaxDistance;
 
         /// <summary>
         /// Preferred neighbor w of node u to reach node v
         /// </summary>
-        public Neighbor NBu;
+        public Port NBu = 0;
 
         /// <summary>
         /// Dictionary that contains all distances of other nodes to node v, as known by node u
@@ -25,17 +25,17 @@ namespace CC {
         public Dictionary<Port, int> NDISu = new Dictionary<Port, int>();
 
         public void SendMessage(string message) {
-            if (NBu == null) {// Can't send whatsoever...
+            if (NBu == 0) {// Can't send whatsoever...
                 if (NDISu.Count() == 0)
                     return; // Might want to throw an error...
                 else { 
                     // Fix it
                     throw new NotImplementedException();
                 }
-
             }
+            if(NBu == Global.LocalPort)
             // Send to NBu
-            NBu.SendMessage(message);
+            Global.Neighbors[NBu].SendMessage(message);
         }
     }
 
@@ -60,6 +60,30 @@ namespace CC {
             }
             catch {
                 NetwProg.Disconnect(Port);
+                throw;
+            }
+        }
+
+    }
+
+    public static class RoutingTable {
+        public static void AddDirty(Port port) {
+            dirty.Add(port);
+        }
+        static List<Port> dirty = new List<Port>();
+
+        public static void Update() {
+            foreach (var port in dirty) {
+                if (port == Global.LocalPort) continue;
+                var row = Global.RoutingTable[port];
+                if (row.NDISu.Count > 0) {
+                    var best = row.NDISu.GetMinimum();
+                    row.NBu = best.Key;
+                    row.Du = best.Value + 1;
+                }
+                else {
+                    // Unreachable node
+                }
             }
         }
 
