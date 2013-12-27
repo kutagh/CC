@@ -72,7 +72,12 @@ namespace CC {
         }
         static HashSet<Port> dirty = new HashSet<Port>();
 
-        public static void Update() {
+
+        public static void Update(params Port[] p) {
+            foreach (var port in p) dirty.Add(port);
+            update();
+        }
+        private static void update() {
             var announceChanges = new List<Port>();
             foreach (var port in dirty) {
                 if (port == Global.LocalPort) continue;
@@ -92,6 +97,10 @@ namespace CC {
             }
 
             // Update everyone about the changes in announceChanges
+            foreach (var port in announceChanges) {
+                foreach (var kvp in Global.Neighbors)
+                    kvp.Value.SendMessage(Global.CreatePackage(Global.PackageNames.RoutingTableUpdate, kvp.Key, Global.Strings.RoutingTableChange.Formatter(Global.LocalPort, port, Global.RoutingTable[port].Du)));
+            }
 
             dirty.Clear();
         }

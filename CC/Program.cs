@@ -79,10 +79,10 @@ namespace CC {
                     if(int.TryParse(input.Substring(2), out Global.Slowdown)) {
                         if (Global.Slowdown < 0) {
                             Global.Slowdown = prev;
-                            Console.WriteLine(Global.Strings.parameterError, "slowdown", "n", "a positive number");
+                            Console.WriteLine(Global.Strings.ParameterError, "slowdown", "n", "a positive number");
                         }
                     }
-                    Console.WriteLine(Global.Strings.parameterError, "slowdown", "n", "a positive number");
+                    Console.WriteLine(Global.Strings.ParameterError, "slowdown", "n", "a positive number");
                     continue;
                 }
                 if (input.StartsWith("R")) {
@@ -100,7 +100,7 @@ namespace CC {
                     else if (input.Equals("on", StringComparison.InvariantCultureIgnoreCase))
                         Global.Verbose = true;
                     else
-                        Console.WriteLine(Global.Strings.parameterError, "toggle", "state", "on or off");
+                        Console.WriteLine(Global.Strings.ParameterError, "toggle", "state", "on or off");
                     continue;
                 }
                 if (input.StartsWith("D")) {
@@ -111,10 +111,10 @@ namespace CC {
                             Disconnect(target);
                         }
                         else
-                            Console.WriteLine(Global.Strings.parameterError, "delete", "port", "a valid port number that is connected to this node");
+                            Console.WriteLine(Global.Strings.ParameterError, "delete", "port", "a valid port number that is connected to this node");
                     }
                     else
-                        Console.WriteLine(Global.Strings.parameterError, "delete", "port", "a valid port number");
+                        Console.WriteLine(Global.Strings.ParameterError, "delete", "port", "a valid port number");
                     continue;
                 }
                 if (input.StartsWith("C")) {
@@ -123,7 +123,7 @@ namespace CC {
                         ConnectTo(target);
                     }
                     else
-                        Console.WriteLine(Global.Strings.parameterError, "connect", "port", "a valid port number");
+                        Console.WriteLine(Global.Strings.ParameterError, "connect", "port", "a valid port number");
                     
                     continue;
                 }
@@ -132,7 +132,7 @@ namespace CC {
                     Port target;
                     if (split.Length > 2 && Port.TryParse(split[1], out target)) {
                         if (!IsInPartition(target) || target == Global.LocalPort) {
-                            Console.WriteLine(Global.Strings.parameterError, "broadcast", "port", "a valid port number that is connected to the current node");
+                            Console.WriteLine(Global.Strings.ParameterError, "broadcast", "port", "a valid port number that is connected to the current node");
                             continue;
                         }
                         var message = new StringBuilder(split[2]);
@@ -150,9 +150,9 @@ namespace CC {
                         continue;
                     }
                     if (split.Length > 2)
-                        Console.WriteLine(Global.Strings.parameterError, "broadcast", "port", "a valid port number");
+                        Console.WriteLine(Global.Strings.ParameterError, "broadcast", "port", "a valid port number");
                     else
-                        Console.WriteLine(Global.Strings.parameterError, "broadcast", "message", "a valid message");
+                        Console.WriteLine(Global.Strings.ParameterError, "broadcast", "message", "a valid message");
                     continue;
                 }
                 Console.WriteLine("You entered an invalid command. Please retry");
@@ -211,6 +211,17 @@ namespace CC {
                                 Console.WriteLine(package[2]);
                             else if (package[0] == Global.PackageNames.Disconnect)
                                 Disconnect(Port.Parse(package[2]));
+                            else if (package[0] == Global.PackageNames.RoutingTableUpdate) {
+                                try {
+                                    package = package[2].Split('!');
+                                    Port u = Port.Parse(package[0]);
+                                    Port v = Port.Parse(package[1]);
+                                    int NDISuv = int.Parse(package[2]);
+                                    Global.RoutingTable[u].NDISu[v] = NDISuv;
+                                    RoutingTable.Update(u);
+                                }
+                                catch { }
+                            }
 
                         }
                         else {
@@ -291,25 +302,26 @@ namespace CC {
             while (Global.RoutingTable == null) Thread.Sleep(1);
             while (Global.Threads == null) Thread.Sleep(1);
             while (Global.Neighbors == null) Thread.Sleep(1);
-            try {
-                Global.RoutingTable.Add(port, new Row() { NBu = port, Du = 1 });
-            }
+            try { Global.Neighbors.Add(port, nb); }
+            catch { Global.Neighbors[port] = nb; }
+            try { Global.RoutingTable.Add(port, new Row() { NBu = port, Du = 1 }); }
             catch {
                 Global.RoutingTable[port].NBu = port;
                 Global.RoutingTable[port].Du = 1;
             }
+            try { Global.RoutingTable[port].NDISu.Add(Global.LocalPort, 1); }
+            catch (Exception) { Global.RoutingTable[port].NDISu[Global.LocalPort] = 1; }
             try {
-                Global.RoutingTable[port].NDISu.Add(Global.LocalPort, 1);
+                var listenForMessages = new Thread(() => ListenTo(port, client));
+                Global.Threads.Add(port, listenForMessages);
+                listenForMessages.Start();
             }
-            catch (Exception) {
-                Global.RoutingTable[port].NDISu[Global.LocalPort] = 1;
-            }
-            var listenForMessages = new Thread(() => ListenTo(port, client));
-            Global.Threads.Add(port, listenForMessages);
-            listenForMessages.Start();
+            catch { }
 
             if (Global.Verbose)
                 Console.WriteLine("Nieuwe verbinding met node {0}".Formatter(port));
+
+            RoutingTable.Update(port);
         }
 
         static void PrintRoutingTable() {
