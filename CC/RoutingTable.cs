@@ -75,18 +75,18 @@ namespace CC {
 
         public static void Update(params Port[] p) {
             foreach (var port in p) dirty.Add(port);
-            update();
+            UpdateDirtyPorts();
         }
-        private static void update() {
+        public static void UpdateDirtyPorts() {
             var announceChanges = new List<Port>();
             foreach (var port in dirty) {
-                if (port == Global.LocalPort) continue;
+                if (!Global.RoutingTable.ContainsKey(port)) continue;
                 var row = Global.RoutingTable[port];
                 var oldDu = row.Du;
                 if (row.NDISu.Count > 0) {
                     var best = row.NDISu.GetMinimum();
                     row.NBu = best.Key;
-                    row.Du = best.Value + 1;
+                    row.Du = row.NBu == port ? 1 : best.Value + 1;
                 }
                 else {
                     // Unreachable node
@@ -95,14 +95,20 @@ namespace CC {
                 if (row.Du != oldDu)
                     announceChanges.Add(port);
             }
-
+            dirty.Clear();
             // Update everyone about the changes in announceChanges
             foreach (var port in announceChanges) {
                 foreach (var kvp in Global.Neighbors)
                     kvp.Value.SendMessage(Global.CreatePackage(Global.PackageNames.RoutingTableUpdate, kvp.Key, Global.Strings.RoutingTableChange.Formatter(Global.LocalPort, port, Global.RoutingTable[port].Du)));
             }
 
-            dirty.Clear();
+            announceChanges.Clear();
+        }
+
+        public static void SendRoutingTableTo(Port port){
+            foreach (var kvp in Global.RoutingTable) {
+                Global.Neighbors[port].SendMessage(Global.CreatePackage(Global.PackageNames.RoutingTableUpdate, kvp.Key, Global.Strings.RoutingTableChange.Formatter(Global.LocalPort, kvp.Key, kvp.Value.Du)));
+            }
         }
 
     }

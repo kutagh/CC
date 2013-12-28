@@ -174,17 +174,22 @@ namespace CC {
                 Console.WriteLine("Received incoming connection"); 
 #endif
                 var reader = new StreamReader(client.GetStream());
-                var package = Global.UnpackPackage(reader.ReadLine());
+                var msg = reader.ReadLine();
+                var package = Global.UnpackPackage(msg);
                 while (package[0] != Global.PackageNames.Connection) { // Error handling
 #if DEBUG
-                    Console.WriteLine("Error: Unexpected package received, dropping package."); 
+                    Console.WriteLine("Error: Unexpected package received, dropping package.");
+                    Console.WriteLine("Package: {0}", msg);
 #endif
                     package = Global.UnpackPackage(reader.ReadLine());
                 }
 #if DEBUG
                 Console.WriteLine("Processing connection");
 #endif
-                ProcessClient(Port.Parse(package[2].Substring(Global.Strings.ConnectionMessage.Length)), client); // Need to acquire proper port number.
+                var newPort = Port.Parse(package[2].Substring(Global.Strings.ConnectionMessage.Length));
+                ProcessClient(newPort, client); // Need to acquire proper port number.
+                RoutingTable.UpdateDirtyPorts();
+                RoutingTable.SendRoutingTableTo(newPort);
 
             }
         }
@@ -284,10 +289,12 @@ namespace CC {
 #if DEBUG
                 Console.WriteLine("Processed");
 #endif
-                Global.RoutingTable[port].SendMessage(Global.CreatePackage(Global.PackageNames.Connection, port, "{0}{1}".Formatter(Global.Strings.ConnectionMessage, Global.LocalPort)));
+                Global.Neighbors[port].SendMessage(Global.CreatePackage(Global.PackageNames.Connection, port, "{0}{1}".Formatter(Global.Strings.ConnectionMessage, Global.LocalPort)));
 #if DEBUG
                 Console.WriteLine("Handshaken");
 #endif
+                RoutingTable.UpdateDirtyPorts();
+                RoutingTable.SendRoutingTableTo(port);
             } // 
             catch (Exception e) {
 #if DEBUG
@@ -298,35 +305,38 @@ namespace CC {
         }
 
         private static void ProcessClient(Port port, TcpClient client) {
+            Console.WriteLine("Processing port {0}.", port);
             var nb = new Neighbor(port, client);
-            while (Global.RoutingTable == null) Thread.Sleep(1);
-            while (Global.Threads == null) Thread.Sleep(1);
-            while (Global.Neighbors == null) Thread.Sleep(1);
-            try { Global.Neighbors.Add(port, nb); }
-            catch { Global.Neighbors[port] = nb; }
-            try { Global.RoutingTable.Add(port, new Row() { NBu = port, Du = 1 }); }
+            while (Global.RoutingTable == null) { Thread.Sleep(10); Console.WriteLine("Sleep"); }
+            while (Global.Threads == null) { Thread.Sleep(10); Console.WriteLine("Sleep"); }
+            while (Global.Neighbors == null) { Thread.Sleep(10); Console.WriteLine("Sleep"); }
+            try { Global.Neighbors.Add(port, nb); Console.WriteLine("Neighbor added"); }
+            catch { Global.Neighbors[port] = nb; Console.WriteLine("Neighbor updated"); }
+            try { Global.RoutingTable.Add(port, new Row() { NBu = port, Du = 1 }); Console.WriteLine("Routing Table row added"); }
             catch {
                 Global.RoutingTable[port].NBu = port;
                 Global.RoutingTable[port].Du = 1;
+                Console.WriteLine("Routing Table row updated");
             }
-            try { Global.RoutingTable[port].NDISu.Add(Global.LocalPort, 1); }
-            catch (Exception) { Global.RoutingTable[port].NDISu[Global.LocalPort] = 1; }
+            try { Global.RoutingTable[port].NDISu.Add(port, 1); Console.WriteLine("NDISu added"); }
+            catch (Exception) { Global.RoutingTable[port].NDISu[port] = 1; Console.WriteLine("NDISu updated"); }
             try {
                 var listenForMessages = new Thread(() => ListenTo(port, client));
                 Global.Threads.Add(port, listenForMessages);
                 listenForMessages.Start();
+                Console.WriteLine("Listener added");
             }
-            catch { }
+            catch { Console.WriteLine("Listener not added"); }
 
             if (Global.Verbose)
                 Console.WriteLine("Nieuwe verbinding met node {0}".Formatter(port));
 
-            RoutingTable.Update(port);
+            RoutingTable.AddDirty(port);
         }
 
         static void PrintRoutingTable() {
             int width = Global.RoutingTable.Max(x => x.Value.Du).ToString().Length;
-            string format = "{0," + width.ToString() + ":" + new String('#', width) + "}";
+            string format = "{0," + width.ToString() + ":" + new String('#', width - 1) + "0}";
             string rowSeparator = "+-----+{0}+-----+".Formatter(new String('-', width));
             Console.WriteLine("Routing Table");
             Console.WriteLine(rowSeparator);
