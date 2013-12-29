@@ -49,7 +49,6 @@ namespace CC {
             Global.LocalPort = Port.Parse(args[iterator]);
             var local = new Neighbor(Global.LocalPort, null);
             Global.RoutingTable.Add(Global.LocalPort, new Row() { NBu = Global.LocalPort, Du = 0 });
-            Console.WriteLine(Global.RoutingTable[Global.LocalPort].Du);
             // Start listener service first
             Thread listener = new Thread(() => ListenAt(Global.LocalPort));
             listener.Start();
@@ -106,12 +105,14 @@ namespace CC {
                 if (input.StartsWith("D")) {
                     Port target;
                     if (Port.TryParse(input.Split(' ')[1], out target)) {
-                        if (Global.Neighbors.ContainsKey(target)) {
-                            Global.RoutingTable[target].SendMessage(Global.CreatePackage(Global.PackageNames.Disconnect, target, Global.LocalPort.ToString()));
-                            Disconnect(target);
-                        }
-                        else
-                            Console.WriteLine(Global.Strings.ParameterError, "delete", "port", "a valid port number that is connected to this node");
+                        lock (Global.RoutingTable)
+                            lock (Global.Neighbors)
+                                if (Global.Neighbors.ContainsKey(target)) {
+                                    Global.RoutingTable[target].SendMessage(Global.CreatePackage(Global.PackageNames.Disconnect, target, Global.LocalPort.ToString()));
+                                    Disconnect(target);
+                                }
+                                else
+                                    Console.WriteLine(Global.Strings.ParameterError, "delete", "port", "a valid port number that is connected to this node");
                     }
                     else
                         Console.WriteLine(Global.Strings.ParameterError, "delete", "port", "a valid port number");
@@ -139,11 +140,14 @@ namespace CC {
                         for (int i = 3; i < split.Length; i++)
                             message.AppendFormat(" {0}", split[i]);
                         var msg = Global.CreatePackage("Broadcast", target, message.ToString());
-                        var sendTo = Global.RoutingTable[target].NBu;
+                        Port sendTo;
+                        lock (Global.RoutingTable)
+                            sendTo = Global.RoutingTable[target].NBu;
 #if DEBUG
                         Console.WriteLine("About to broadcast {0} to port {1} via port {2}", msg, target, sendTo);
 #endif
-                        Global.Neighbors[sendTo].SendMessage(msg);
+                        lock (Global.Neighbors)
+                            Global.Neighbors[sendTo].SendMessage(msg);
 #if DEBUG
                         Console.WriteLine("Sent message to {0}", target);
 #endif
@@ -222,24 +226,33 @@ namespace CC {
                                     Port u = Port.Parse(package[0]);
                                     Port v = Port.Parse(package[1]);
                                     int NDISuv = int.Parse(package[2]);
-                                    Global.RoutingTable[u].NDISu[v] = NDISuv;
-                                    RoutingTable.Update(u);
+                                    lock (Global.RoutingTable) {
+                                        Global.RoutingTable[u].NDISu[v] = NDISuv;
+                                        if (!Global.RoutingTable.ContainsKey(v))
+                                            Global.RoutingTable.Add(v, new Row() { NBu = u, Du = NDISuv + Global.RoutingTable[u].Du });
+                                        if (Global.RoutingTable[v].NDISu.ContainsKey(u))
+                                            Global.RoutingTable[v].NDISu[u] = NDISuv;
+                                        else
+                                            Global.RoutingTable[v].NDISu.Add(u, NDISuv);
+                                    }
+                                    RoutingTable.Update(u, v);
                                 }
                                 catch { }
                             }
 
                         }
                         else {
-                            if (Global.RoutingTable.ContainsKey(target)) {
-                                Global.RoutingTable[target].SendMessage(message);
-                                Console.WriteLine("Bericht voor {0} verzonden naar {1}".Formatter(target, Global.RoutingTable[target].NBu));
-                            }
-                            else {
-                                // Can't deliver package
+                            lock(Global.RoutingTable)
+                                if (Global.RoutingTable.ContainsKey(target)) {
+                                    Global.RoutingTable[target].SendMessage(message);
+                                    Console.WriteLine("Bericht voor {0} verzonden naar {1}".Formatter(target, Global.RoutingTable[target].NBu));
+                                }
+                                else {
+                                    // Can't deliver package
 #if DEBUG
-                                Console.WriteLine("Error: Package for {0} can't be delivered. Package info: {1}".Formatter(target, message));
+                                    Console.WriteLine("Error: Package for {0} can't be delivered. Package info: {1}".Formatter(target, message));
 #endif
-                            }
+                                }
                         }
                     }
                 }
@@ -250,20 +263,23 @@ namespace CC {
         }
 
         public static void Disconnect(Port p) {
-            var node = Global.Neighbors[p];
+            Neighbor node;
+            lock (Global.Neighbors)
+                node = Global.Neighbors[p];
             if (node.Port == p) {
                 node.Client.Close();
             }
-            Global.RoutingTable[p].Du = Global.MaxDistance;
-            Global.RoutingTable[p].NDISu.Remove(Global.LocalPort);
-            if (Global.RoutingTable[p].NDISu.Count > 0) {
-                var shortestPath = Global.RoutingTable[p].NDISu.Aggregate((a, b) => a.Value < b.Value ? a : b);
-                Global.RoutingTable[p].Du = shortestPath.Value + Global.RoutingTable[shortestPath.Key].Du;
+            lock (Global.RoutingTable) {
+                Global.RoutingTable[p].NDISu.Remove(Global.LocalPort);
+                RoutingTable.Update(p);
             }
             if (Global.Verbose)
                 Console.WriteLine("Verbinding verbroken met node {0}".Formatter(p));
-            var th = Global.Threads[p];
-            Global.Threads.Remove(p);
+            Thread th;
+            lock (Global.Threads) {
+                th = Global.Threads[p];
+                Global.Threads.Remove(p);
+            }
             th.Abort();
         }
 
@@ -289,7 +305,8 @@ namespace CC {
 #if DEBUG
                 Console.WriteLine("Processed");
 #endif
-                Global.Neighbors[port].SendMessage(Global.CreatePackage(Global.PackageNames.Connection, port, "{0}{1}".Formatter(Global.Strings.ConnectionMessage, Global.LocalPort)));
+                lock (Global.Neighbors)
+                    Global.Neighbors[port].SendMessage(Global.CreatePackage(Global.PackageNames.Connection, port, "{0}{1}".Formatter(Global.Strings.ConnectionMessage, Global.LocalPort)));
 #if DEBUG
                 Console.WriteLine("Handshaken");
 #endif
@@ -310,23 +327,31 @@ namespace CC {
             while (Global.RoutingTable == null) { Thread.Sleep(10); Console.WriteLine("Sleep"); }
             while (Global.Threads == null) { Thread.Sleep(10); Console.WriteLine("Sleep"); }
             while (Global.Neighbors == null) { Thread.Sleep(10); Console.WriteLine("Sleep"); }
-            try { Global.Neighbors.Add(port, nb); Console.WriteLine("Neighbor added"); }
-            catch { Global.Neighbors[port] = nb; Console.WriteLine("Neighbor updated"); }
-            try { Global.RoutingTable.Add(port, new Row() { NBu = port, Du = 1 }); Console.WriteLine("Routing Table row added"); }
-            catch {
-                Global.RoutingTable[port].NBu = port;
-                Global.RoutingTable[port].Du = 1;
-                Console.WriteLine("Routing Table row updated");
+            lock (Global.Neighbors) {
+                if(Global.Neighbors.ContainsKey(port))
+                    Global.Neighbors[port] = nb; 
+                else Global.Neighbors.Add(port, nb); 
+                Console.WriteLine("Neighbor added"); 
             }
-            try { Global.RoutingTable[port].NDISu.Add(port, 1); Console.WriteLine("NDISu added"); }
-            catch (Exception) { Global.RoutingTable[port].NDISu[port] = 1; Console.WriteLine("NDISu updated"); }
-            try {
+            lock (Global.RoutingTable) {
+                if (!Global.RoutingTable.ContainsKey(port))
+                    Global.RoutingTable.Add(port, new Row() { NBu = port, Du = 1 });
+                else {
+                    Global.RoutingTable[port].NBu = port;
+                    Global.RoutingTable[port].Du = 1;
+                    Console.WriteLine("Routing Table row updated");
+                }
+                if(Global.RoutingTable[port].NDISu.ContainsKey(port))
+                    Global.RoutingTable[port].NDISu[port] = 0; 
+                else
+                    Global.RoutingTable[port].NDISu.Add(port, 0); 
+            }
+            lock (Global.Threads) {
                 var listenForMessages = new Thread(() => ListenTo(port, client));
                 Global.Threads.Add(port, listenForMessages);
                 listenForMessages.Start();
                 Console.WriteLine("Listener added");
             }
-            catch { Console.WriteLine("Listener not added"); }
 
             if (Global.Verbose)
                 Console.WriteLine("Nieuwe verbinding met node {0}".Formatter(port));
@@ -335,20 +360,22 @@ namespace CC {
         }
 
         static void PrintRoutingTable() {
-            int width = Global.RoutingTable.Max(x => x.Value.Du).ToString().Length;
-            string format = "{0," + width.ToString() + ":" + new String('#', width - 1) + "0}";
-            string rowSeparator = "+-----+{0}+-----+".Formatter(new String('-', width));
-            Console.WriteLine("Routing Table");
-            Console.WriteLine(rowSeparator);
-            Console.WriteLine("|Node |D{0}|   Nb|", width > 0 ? new String(' ', width - 1) : "");
-            Console.WriteLine(rowSeparator);
-            foreach (var row in Global.RoutingTable) {
-                Console.WriteLine("|{0}|{1}|{2}|", 
-                    "{0,5:#####}".Formatter(row.Key), 
-                    format.Formatter(row.Value.Du),
-                    "{0,5:#####}".Formatter(row.Value.NBu == Global.LocalPort ? "local" : row.Value.NBu.ToString()));
+            lock (Global.RoutingTable) {
+                int width = Global.RoutingTable.Max(x => x.Value.Du).ToString().Length;
+                string format = "{0," + width.ToString() + ":" + new String('#', width - 1) + "0}";
+                string rowSeparator = "+-----+{0}+-----+".Formatter(new String('-', width));
+                Console.WriteLine("Routing Table");
+                Console.WriteLine(rowSeparator);
+                Console.WriteLine("|Node |D{0}|   Nb|", width > 0 ? new String(' ', width - 1) : "");
+                Console.WriteLine(rowSeparator);
+                foreach (var row in Global.RoutingTable) {
+                    Console.WriteLine("|{0}|{1}|{2}|",
+                        "{0,5:#####}".Formatter(row.Key),
+                        format.Formatter(row.Value.Du),
+                        "{0,5:#####}".Formatter(row.Value.NBu == Global.LocalPort ? "local" : row.Value.NBu.ToString()));
+                }
+                Console.WriteLine(rowSeparator);
             }
-            Console.WriteLine(rowSeparator);
         }
 
         static void BroadcastRoutingTableChanges() {
