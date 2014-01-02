@@ -35,7 +35,8 @@ namespace CC {
             }
             if (NBu == Global.LocalPort) { }
             // Send to NBu
-            Global.Neighbors[NBu].SendMessage(message);
+            lock (Global.Neighbors)
+                Global.Neighbors[NBu].SendMessage(message);
         }
     }
 
@@ -54,7 +55,9 @@ namespace CC {
         }
 
         public void SendMessage(string message) {
+            if (Port == Global.LocalPort) return;
             try {
+                Console.WriteLine("Sending message: {0}", message);
                 message.Trim();
                 writer.WriteLine(message);
             }
@@ -80,9 +83,7 @@ namespace CC {
             UpdateDirtyPorts();
         }
         public static void UpdateDirtyPorts() {
-            lock (Global.RoutingTable)
-                lock (Global.Neighbors)
-                    lock (dirty) {
+            lock (Global.RoutingTable) lock (Global.Neighbors) lock (dirty) {
                         var announceChanges = new List<Port>();
                         foreach (var port in dirty) {
                             if (port == Global.LocalPort) continue;

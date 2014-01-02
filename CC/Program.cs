@@ -227,9 +227,14 @@ namespace CC {
                                     Port v = Port.Parse(package[1]);
                                     int NDISuv = int.Parse(package[2]);
                                     lock (Global.RoutingTable) {
-                                        Global.RoutingTable[u].NDISu[v] = NDISuv;
-                                        if (!Global.RoutingTable.ContainsKey(v))
+                                        if (Global.RoutingTable[u].NDISu.ContainsKey(v))
+                                            Global.RoutingTable[u].NDISu[v] = NDISuv;
+                                        else
+                                            Global.RoutingTable[u].NDISu.Add(v, NDISuv);
+                                        if (!Global.RoutingTable.ContainsKey(v)) {
                                             Global.RoutingTable.Add(v, new Row() { NBu = u, Du = NDISuv + Global.RoutingTable[u].Du });
+                                            Console.WriteLine("Added {0} from {1}", v, u);
+                                        }
                                         if (Global.RoutingTable[v].NDISu.ContainsKey(u))
                                             Global.RoutingTable[v].NDISu[u] = NDISuv;
                                         else
@@ -237,7 +242,9 @@ namespace CC {
                                     }
                                     RoutingTable.Update(u, v);
                                 }
-                                catch { }
+                                catch {
+                                    Console.WriteLine("Error parsing update");
+                                }
                             }
 
                         }
