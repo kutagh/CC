@@ -210,8 +210,12 @@ namespace CC {
                             // Error handling, not a valid package, would cause exceptions.
                             continue;
                         }
+                        var split = message.Split('?');
+                        message = split[1];
+                        Port source = Port.Parse(split[0].Substring("Sending from ".Length));
                         var package = Global.UnpackPackage(message);
                         Port target = Port.Parse(package[1]);
+                        if (Global.Verbose) Console.WriteLine("Bericht van node {0} voor node {1}", source, package[1]);
                         if (target == Global.LocalPort) {
                             // Handle package here
                             if (package[0] == Global.PackageNames.Broadcast)
@@ -224,6 +228,7 @@ namespace CC {
                                     Port u = Port.Parse(package[0]);
                                     Port v = Port.Parse(package[1]);
                                     int NDISuv = int.Parse(package[2]);
+                                    if (Global.Verbose) Console.WriteLine("Schatting binnen van {0}: Afstand naar {1} is {2} via {3}", source, v, NDISuv, u);
                                     lock (Global.RoutingTable) {
                                         if (Global.RoutingTable[u].NDISu.ContainsKey(v))
                                             Global.RoutingTable[u].NDISu[v] = NDISuv;
@@ -273,9 +278,7 @@ namespace CC {
             Neighbor node;
             lock (Global.Neighbors)
                 node = Global.Neighbors[p];
-            if (node.Port == p) {
-                node.Client.Close();
-            }
+            node.Client.Close();
             lock (Global.RoutingTable) {
                 Global.RoutingTable[p].NDISu.Remove(Global.LocalPort);
                 RoutingTable.Update(p);

@@ -11,7 +11,8 @@ namespace CC {
         public static class Strings {
             public static string ConnectionMessage = "Connection from ";
             public static string ParameterError = "The {0} parameter '{1}' was not correct, please enter {2}.";
-            public static string RoutingTableChange = "{0}!{1}!{2}"; // 
+            public static string RoutingTableChange = "{0}!{1}!{2}";
+            public static string SendingFrom = "Sending from {0}?{1}";
         }
 
         public static class PackageNames {

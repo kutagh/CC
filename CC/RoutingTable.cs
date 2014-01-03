@@ -59,7 +59,7 @@ namespace CC {
             try {
                 Console.WriteLine("Sending message: {0}", message);
                 message.Trim();
-                writer.WriteLine(message);
+                writer.WriteLine(Global.Strings.SendingFrom, Global.LocalPort, message);
             }
             catch {
                 NetwProg.Disconnect(Port);
@@ -106,8 +106,10 @@ namespace CC {
                                 row.NBu = 0;
 
                             }
-                            if (row.Du != oldDu)
+                            if (row.Du != oldDu) {
                                 announceChanges.Add(port);
+                                if (Global.Verbose) Console.WriteLine("Afstand naar {0} nu {1}", port, row.Du);
+                            }
                         }
                         foreach (var p in newPorts)
                             announceChanges.Add(p);
@@ -124,8 +126,10 @@ namespace CC {
 
         public static void SendRoutingTableTo(Port port) {
             lock (Global.RoutingTable)
-                foreach (var kvp in Global.RoutingTable)
+                foreach (var kvp in Global.RoutingTable) {
                     Global.Neighbors[port].SendMessage(Global.CreatePackage(Global.PackageNames.RoutingTableUpdate, port, Global.Strings.RoutingTableChange.Formatter(Global.LocalPort, kvp.Key, kvp.Value.Du)));
+                    if(Global.Verbose) Console.WriteLine("Schatting verstuurd naar {0}: Afstand naar {1} is {2} via {3}", port, kvp.Key, kvp.Value.Du, kvp.Value.NBu);
+                }
 
         }
 
