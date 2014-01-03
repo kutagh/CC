@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Port = System.Int16;
 
@@ -57,7 +58,9 @@ namespace CC {
         public void SendMessage(string message) {
             if (Port == Global.LocalPort) return;
             try {
-                Console.WriteLine("Sending message: {0}", message);
+#if DEBUG
+                Console.WriteLine("Sending message: {0}", message); 
+#endif
                 message.Trim();
                 writer.WriteLine(Global.Strings.SendingFrom, Global.LocalPort, message);
             }
@@ -115,8 +118,11 @@ namespace CC {
                             announceChanges.Add(p);
                         // Update everyone about the changes in announceChanges
                         foreach (var port in announceChanges) {
-                            foreach (var kvp in Global.Neighbors)
+                            foreach (var kvp in Global.Neighbors) {
                                 kvp.Value.SendMessage(Global.CreatePackage(Global.PackageNames.RoutingTableUpdate, kvp.Key, Global.Strings.RoutingTableChange.Formatter(Global.LocalPort, port, Global.RoutingTable[port].Du)));
+                                if (Global.Verbose) Console.WriteLine("Schatting verstuurd naar {0}: Afstand naar {1} is {2} via {3}", kvp.Key, port, Global.RoutingTable[port].Du, Global.RoutingTable[port].NBu);
+                                Interlocked.Increment(ref Global.DistanceEstimates);
+                            }
                         }
 
                         dirty.Clear();
@@ -129,6 +135,7 @@ namespace CC {
                 foreach (var kvp in Global.RoutingTable) {
                     Global.Neighbors[port].SendMessage(Global.CreatePackage(Global.PackageNames.RoutingTableUpdate, port, Global.Strings.RoutingTableChange.Formatter(Global.LocalPort, kvp.Key, kvp.Value.Du)));
                     if(Global.Verbose) Console.WriteLine("Schatting verstuurd naar {0}: Afstand naar {1} is {2} via {3}", port, kvp.Key, kvp.Value.Du, kvp.Value.NBu);
+                    Interlocked.Increment(ref Global.DistanceEstimates);
                 }
 
         }
@@ -138,6 +145,8 @@ namespace CC {
                 foreach (var kvp in Global.RoutingTable)
                     foreach (var nb in Global.Neighbors) {
                         nb.Value.SendMessage(Global.CreatePackage(Global.PackageNames.RoutingTableUpdate, nb.Key, Global.Strings.RoutingTableChange.Formatter(Global.LocalPort, kvp.Key, kvp.Value.Du)));
+                        if (Global.Verbose) Console.WriteLine("Schatting verstuurd naar {0}: Afstand naar {1} is {2} via {3}", nb.Key, kvp.Key, kvp.Value.Du, kvp.Value.NBu);
+                        Interlocked.Increment(ref Global.DistanceEstimates);
                     }
             }
         }

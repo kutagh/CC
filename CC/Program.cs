@@ -1,5 +1,13 @@
 ﻿/* Ian Zunderdorp (3643034) & Bas Brouwer (3966747)
  * 
+ * M: By using Interlocked.Increment every time we do a SendMessage from the RoutingTable class,
+ * we ensure that this value is correct. 
+ * A SendMessage is always directed to one client, not an undirected broadcast, so this is the ideal
+ * opportunity to increment the counter to account for a distance estimation that has been sent.
+ * 
+ * A lot of debugging information has been added. To see the program without the debugging, 
+ * please set the development mode at Release instead of Debug. Then compile the program and finally
+ * open /NetChange/bin/Release (not /NetChange/bin/Debug).
  */
 
 
@@ -176,7 +184,7 @@ namespace CC {
                 Console.WriteLine("Received incoming connection"); 
 #endif
                 var reader = new StreamReader(client.GetStream());
-                var msg = reader.ReadLine();
+                var msg = reader.ReadLine().Split('?')[1];
                 var package = Global.UnpackPackage(msg);
                 while (package[0] != Global.PackageNames.Connection) { // Error handling
 #if DEBUG
@@ -205,13 +213,13 @@ namespace CC {
                         Console.WriteLine(message);
 #endif
                         Thread.Sleep(Global.Slowdown); // Sleep if required
+                        var split = message.Split('?');
+                        message = split[1];
 
                         if (!message.IsValidPackage()) {
                             // Error handling, not a valid package, would cause exceptions.
                             continue;
                         }
-                        var split = message.Split('?');
-                        message = split[1];
                         Port source = Port.Parse(split[0].Substring("Sending from ".Length));
                         var package = Global.UnpackPackage(message);
                         Port target = Port.Parse(package[1]);
@@ -238,7 +246,9 @@ namespace CC {
                                         }
                                         if (!Global.RoutingTable.ContainsKey(v)) {
                                             Global.RoutingTable.Add(v, new Row() { NBu = u, Du = NDISuv + Global.RoutingTable[u].Du });
-                                            Console.WriteLine("Added {0} from {1}", v, u);
+#if DEBUG
+                                            Console.WriteLine("Added {0} from {1}", v, u); 
+#endif
                                         }
                                         if (Global.RoutingTable[v].NDISu.ContainsKey(u))
                                             Global.RoutingTable[v].NDISu[u] = NDISuv;
@@ -248,7 +258,9 @@ namespace CC {
                                     RoutingTable.Update(u, v);
                                 }
                                 catch {
-                                    Console.WriteLine("Error parsing update");
+#if DEBUG
+                                    Console.WriteLine("Error parsing update"); 
+#endif
                                 }
                             }
 
@@ -257,7 +269,8 @@ namespace CC {
                             lock(Global.RoutingTable)
                                 if (Global.RoutingTable.ContainsKey(target)) {
                                     Global.RoutingTable[target].SendMessage(message);
-                                    Console.WriteLine("Bericht voor {0} verzonden naar {1}".Formatter(target, Global.RoutingTable[target].NBu));
+                                    if (Global.Verbose)
+                                        Console.WriteLine("Bericht voor {0} verzonden naar {1}".Formatter(target, Global.RoutingTable[target].NBu));
                                 }
                                 else {
                                     // Can't deliver package
@@ -328,16 +341,23 @@ namespace CC {
         }
 
         private static void ProcessClient(Port port, TcpClient client) {
-            Console.WriteLine("Processing port {0}.", port);
+#if DEBUG
+            Console.WriteLine("Processing port {0}.", port); 
+#endif
             var nb = new Neighbor(port, client);
-            while (Global.RoutingTable == null) { Thread.Sleep(10); Console.WriteLine("Sleep"); }
-            while (Global.Threads == null) { Thread.Sleep(10); Console.WriteLine("Sleep"); }
-            while (Global.Neighbors == null) { Thread.Sleep(10); Console.WriteLine("Sleep"); }
+            while (Global.RoutingTable == null || Global.Threads == null || Global.Neighbors == null) { 
+                Thread.Sleep(10);
+#if DEBUG
+                Console.WriteLine("Sleep");  
+#endif
+            }
             lock (Global.Neighbors) {
                 if(Global.Neighbors.ContainsKey(port))
                     Global.Neighbors[port] = nb; 
-                else Global.Neighbors.Add(port, nb); 
-                Console.WriteLine("Neighbor added"); 
+                else Global.Neighbors.Add(port, nb);
+#if DEBUG
+                Console.WriteLine("Neighbor added");  
+#endif
             }
             lock (Global.RoutingTable) {
                 if (!Global.RoutingTable.ContainsKey(port))
@@ -345,7 +365,9 @@ namespace CC {
                 else {
                     Global.RoutingTable[port].NBu = port;
                     Global.RoutingTable[port].Du = 1;
-                    Console.WriteLine("Routing Table row updated");
+#if DEBUG
+                    Console.WriteLine("Routing Table row updated"); 
+#endif
                 }
                 if(Global.RoutingTable[port].NDISu.ContainsKey(port))
                     Global.RoutingTable[port].NDISu[port] = 0; 
@@ -356,7 +378,9 @@ namespace CC {
                 var listenForMessages = new Thread(() => ListenTo(port, client));
                 Global.Threads.Add(port, listenForMessages);
                 listenForMessages.Start();
-                Console.WriteLine("Listener added");
+#if DEBUG
+                Console.WriteLine("Listener added"); 
+#endif
             }
 
             if (Global.Verbose)
@@ -383,10 +407,6 @@ namespace CC {
                 }
                 Console.WriteLine(rowSeparator);
             }
-        }
-
-        static void BroadcastRoutingTableChanges() {
-            //
         }
     }
 }
