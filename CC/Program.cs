@@ -65,10 +65,8 @@ namespace CC {
 #endif
             }
 #if DEBUG
-            Console.WriteLine("Connected to them all");
+            Console.WriteLine("Connected to them all, time to broadcast");
 #endif
-
-
             // Input handling
 
             while (true) {
@@ -229,8 +227,10 @@ namespace CC {
                                     lock (Global.RoutingTable) {
                                         if (Global.RoutingTable[u].NDISu.ContainsKey(v))
                                             Global.RoutingTable[u].NDISu[v] = NDISuv;
-                                        else
+                                        else {
                                             Global.RoutingTable[u].NDISu.Add(v, NDISuv);
+                                            RoutingTable.AddNewPort(v);
+                                        }
                                         if (!Global.RoutingTable.ContainsKey(v)) {
                                             Global.RoutingTable.Add(v, new Row() { NBu = u, Du = NDISuv + Global.RoutingTable[u].Du });
                                             Console.WriteLine("Added {0} from {1}", v, u);
@@ -292,10 +292,6 @@ namespace CC {
 
         static bool IsInPartition(Port port) {
             return Global.RoutingTable.ContainsKey(port) && Global.RoutingTable[port].Du < Global.MaxDistance;
-        }
-
-        static void OnRoutingChange() {
-            // Send update to all connected clients
         }
 
         static void ConnectTo(Port port) {
@@ -364,6 +360,7 @@ namespace CC {
                 Console.WriteLine("Nieuwe verbinding met node {0}".Formatter(port));
 
             RoutingTable.AddDirty(port);
+            RoutingTable.AddNewPort(port);
         }
 
         static void PrintRoutingTable() {

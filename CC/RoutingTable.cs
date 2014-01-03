@@ -75,16 +75,21 @@ namespace CC {
                 dirty.Add(port);
         }
         static HashSet<Port> dirty = new HashSet<Port>();
-
+        static HashSet<Port> newPorts = new HashSet<Port>();
 
         public static void Update(params Port[] p) {
             lock (dirty)
                 foreach (var port in p) dirty.Add(port);
             UpdateDirtyPorts();
         }
+
+        public static void AddNewPort(Port p) {
+            lock (newPorts)
+                newPorts.Add(p);
+        }
         public static void UpdateDirtyPorts() {
-            lock (Global.RoutingTable) lock (Global.Neighbors) lock (dirty) {
-                        var announceChanges = new List<Port>();
+            lock (Global.RoutingTable) lock (Global.Neighbors) lock (dirty) lock(newPorts) {
+                        var announceChanges = new HashSet<Port>();
                         foreach (var port in dirty) {
                             if (port == Global.LocalPort) continue;
                             if (!Global.RoutingTable.ContainsKey(port)) continue;
@@ -104,6 +109,8 @@ namespace CC {
                             if (row.Du != oldDu)
                                 announceChanges.Add(port);
                         }
+                        foreach (var p in newPorts)
+                            announceChanges.Add(p);
                         // Update everyone about the changes in announceChanges
                         foreach (var port in announceChanges) {
                             foreach (var kvp in Global.Neighbors)
@@ -111,15 +118,24 @@ namespace CC {
                         }
 
                         dirty.Clear();
-                        announceChanges.Clear();
+                        newPorts.Clear();
                     }
         }
 
         public static void SendRoutingTableTo(Port port) {
             lock (Global.RoutingTable)
                 foreach (var kvp in Global.RoutingTable)
-                    Global.Neighbors[port].SendMessage(Global.CreatePackage(Global.PackageNames.RoutingTableUpdate, kvp.Key, Global.Strings.RoutingTableChange.Formatter(Global.LocalPort, kvp.Key, kvp.Value.Du)));
+                    Global.Neighbors[port].SendMessage(Global.CreatePackage(Global.PackageNames.RoutingTableUpdate, port, Global.Strings.RoutingTableChange.Formatter(Global.LocalPort, kvp.Key, kvp.Value.Du)));
 
+        }
+
+        public static void BroadcastRoutingTable() {
+            lock (Global.RoutingTable) lock (Global.Neighbors) {
+                foreach (var kvp in Global.RoutingTable)
+                    foreach (var nb in Global.Neighbors) {
+                        nb.Value.SendMessage(Global.CreatePackage(Global.PackageNames.RoutingTableUpdate, nb.Key, Global.Strings.RoutingTableChange.Formatter(Global.LocalPort, kvp.Key, kvp.Value.Du)));
+                    }
+            }
         }
 
     }
