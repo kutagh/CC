@@ -9,12 +9,9 @@
  * please set the development mode at Release instead of Debug. Then compile the program and finally
  * open /NetChange/bin/Release (not /NetChange/bin/Debug).
  * 
- * Currently not working:
+ * Currently not working (properly):
  * Disconnect
  * Closing client updates rest of network
- * 
- * Not sure:
- * Slowdown (S n)
  */
 
 
@@ -116,13 +113,15 @@ namespace CC {
                     continue;
                 }
                 if (input.StartsWith("D")) {
+                    Console.WriteLine("Apologies: Disconnect is not working properly. Therefore, we decided to not execute this command");
+                    continue;
                     Port target;
                     if (Port.TryParse(input.Split(' ')[1], out target)) {
                         lock (Global.RoutingTable)
                             lock (Global.Neighbors)
                                 if (Global.Neighbors.ContainsKey(target)) {
                                     Global.RoutingTable[target].SendMessage(Global.CreatePackage(Global.PackageNames.Disconnect, target, Global.LocalPort.ToString()));
-                                    Disconnect(target);
+                                    Disconnect(target, "Disconnect command inputted");
                                 }
                                 else
                                     Console.WriteLine(Global.Strings.ParameterError, "delete", "port", "a valid port number that is connected to this node");
@@ -236,7 +235,7 @@ namespace CC {
                             if (package[0] == Global.PackageNames.Broadcast)
                                 Console.WriteLine(package[2]);
                             else if (package[0] == Global.PackageNames.Disconnect)
-                                Disconnect(Port.Parse(package[2]));
+                                Disconnect(Port.Parse(package[2]), "ListenTo, disconnect message received");
                             else if (package[0] == Global.PackageNames.RoutingTableUpdate) {
                                 try {
                                     package = package[2].Split('!');
@@ -293,32 +292,50 @@ namespace CC {
 #if DEBUG
                 Console.WriteLine("Connection lost"); 
 #endif
-                Disconnect(port);
+                Disconnect(port, "ListenTo exception");
             }
         }
 
-        public static void Disconnect(Port p) {
+        public static void Disconnect(Port p, string origin = "undefined") {
+#if DEBUG
+            Console.WriteLine("Attempting disconnecting, command called from {0}", origin); 
+#endif
             lock (Global.Neighbors) {
                 if (Global.Neighbors.ContainsKey(p)) {
                     Global.Neighbors[p].Client.Close();
                     Global.Neighbors.Remove(p);
                 }
+#if DEBUG
+                else
+                    Console.WriteLine("Neighbor not removed upon disconnect"); 
+#endif
             }
 
             lock (Global.RoutingTable) {
                 if (Global.RoutingTable.ContainsKey(p) && Global.RoutingTable[p].NDISu.ContainsKey(Global.LocalPort))
                     Global.RoutingTable[p].NDISu.Remove(Global.LocalPort);
+                    
+#if DEBUG
+                else
+                    Console.WriteLine("NDISu not removed upon disconnect"); 
+#endif
                 RoutingTable.Update(p);
             }
             if (Global.Verbose)
                 Console.WriteLine("Verbinding verbroken met node {0}".Formatter(p));
             Thread th;
             lock (Global.Threads) {
-                th = Global.Threads[p];
-                Global.Threads.Remove(p);
+                if (Global.Threads.ContainsKey(p)) {
+                    th = Global.Threads[p];
+                    Global.Threads.Remove(p);
+                    if (th.IsAlive)
+                        th.Abort();
+                }
+#if DEBUG
+               else
+                    Console.WriteLine("Thread not removed upon disconnect");
+#endif   
             }
-            if (th.IsAlive)
-                th.Abort();
         }
 
         static bool IsInPartition(Port port) {

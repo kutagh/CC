@@ -69,7 +69,7 @@ namespace CC {
                 Console.WriteLine("Connection lost"); 
 #endif
 
-                NetwProg.Disconnect(Port);
+                NetwProg.Disconnect(Port, "Neighbor SendMessage exception");
                 //throw;
             }
         }
