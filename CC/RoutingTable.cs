@@ -65,8 +65,12 @@ namespace CC {
                 writer.WriteLine(Global.Strings.SendingFrom, Global.LocalPort, message);
             }
             catch {
+#if DEBUG
+                Console.WriteLine("Connection lost"); 
+#endif
+
                 NetwProg.Disconnect(Port);
-                throw;
+                //throw;
             }
         }
 

@@ -8,6 +8,13 @@
  * A lot of debugging information has been added. To see the program without the debugging, 
  * please set the development mode at Release instead of Debug. Then compile the program and finally
  * open /NetChange/bin/Release (not /NetChange/bin/Debug).
+ * 
+ * Currently not working:
+ * Disconnect
+ * Closing client updates rest of network
+ * 
+ * Not sure:
+ * Slowdown (S n)
  */
 
 
@@ -283,17 +290,24 @@ namespace CC {
                 }
             }
             catch {
+#if DEBUG
+                Console.WriteLine("Connection lost"); 
+#endif
                 Disconnect(port);
             }
         }
 
         public static void Disconnect(Port p) {
-            Neighbor node;
-            lock (Global.Neighbors)
-                node = Global.Neighbors[p];
-            node.Client.Close();
+            lock (Global.Neighbors) {
+                if (Global.Neighbors.ContainsKey(p)) {
+                    Global.Neighbors[p].Client.Close();
+                    Global.Neighbors.Remove(p);
+                }
+            }
+
             lock (Global.RoutingTable) {
-                Global.RoutingTable[p].NDISu.Remove(Global.LocalPort);
+                if (Global.RoutingTable.ContainsKey(p) && Global.RoutingTable[p].NDISu.ContainsKey(Global.LocalPort))
+                    Global.RoutingTable[p].NDISu.Remove(Global.LocalPort);
                 RoutingTable.Update(p);
             }
             if (Global.Verbose)
@@ -303,7 +317,8 @@ namespace CC {
                 th = Global.Threads[p];
                 Global.Threads.Remove(p);
             }
-            th.Abort();
+            if (th.IsAlive)
+                th.Abort();
         }
 
         static bool IsInPartition(Port port) {
@@ -369,10 +384,10 @@ namespace CC {
                     Console.WriteLine("Routing Table row updated"); 
 #endif
                 }
-                if(Global.RoutingTable[port].NDISu.ContainsKey(port))
-                    Global.RoutingTable[port].NDISu[port] = 0; 
+                if(Global.RoutingTable[port].NDISu.ContainsKey(Global.LocalPort))
+                    Global.RoutingTable[port].NDISu[Global.LocalPort] = 1; 
                 else
-                    Global.RoutingTable[port].NDISu.Add(port, 0); 
+                    Global.RoutingTable[port].NDISu.Add(Global.LocalPort, 1); 
             }
             lock (Global.Threads) {
                 var listenForMessages = new Thread(() => ListenTo(port, client));
